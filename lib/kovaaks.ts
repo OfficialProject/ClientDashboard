@@ -1,87 +1,110 @@
 /**
- * Client for KovaaK's own webapp backend (kovaaks.com/webapp-backend/...).
+ * KovaaK's webapp backend client.
  *
- * IMPORTANT: this is an unofficial, reverse-engineered API - not documented
- * or supported by KovaaK Games. It's the same surface community tools
- * (evxl.app included, almost certainly) use. It can change without notice.
- * None of these calls have been executed live from this environment
- * (kovaaks.com isn't reachable from the build sandbox) - the contracts
- * below are transcribed from a public Postman collection and a working
- * open-source wrapper, but the FIRST real call should be treated as a
- * smoke test, not an assumption.
- *
- * Primary path: KovaaK's computes full benchmark progress (every scenario's
- * score, for a given benchmarkId + steamId) in one call, no auth, no
- * username resolution needed - GET .../benchmarks/player-progress-rank-benchmark.
- * We use it purely as a raw-score source and re-run OUR OWN Viscose tier
- * math (lib/viscose.ts) on top, because KovaaK's own "rank" field uses its
- * generic Bronze/Silver/Gold ladder, not Viscose's Lemming/Hare/... names.
+ * The Benchmark Tracker is public and community tools use the same backend,
+ * but the endpoints are undocumented. Keep the raw response available for
+ * diagnostics so a backend change cannot silently look like "0 scores".
  */
-
 const BASE = "https://kovaaks.com/webapp-backend";
 
 export interface BenchmarkProgressScenario {
   score: number;
-  leaderboard_rank: number;
-  scenario_rank: number;
-  rank_maxes: number[];
+  leaderboard_rank?: number;
+  scenario_rank?: number;
+  rank_maxes?: number[];
 }
 export interface BenchmarkProgressCategory {
-  benchmark_progress: number;
-  category_rank: number;
-  rank_maxes: number[];
+  benchmark_progress?: number;
+  category_rank?: number;
+  rank_maxes?: number[];
   scenarios: Record<string, BenchmarkProgressScenario>;
 }
 export interface BenchmarkProgressResponse {
-  benchmark_progress: number;
-  overall_rank: number;
-  categories: Record<string, BenchmarkProgressCategory>;
-  ranks: { name: string; color: string }[];
+  benchmark_progress?: number;
+  overall_rank?: number;
+  categories?: Record<string, BenchmarkProgressCategory>;
+  ranks?: { name: string; color: string }[];
+  [key: string]: unknown;
+}
+
+export interface KovaaKsDiagnostic {
+  url: string;
+  status: number;
+  ok: boolean;
+  contentType: string | null;
+  bodyPreview: string;
+  json: unknown;
+}
+
+async function fetchJson(url: string): Promise<KovaaKsDiagnostic> {
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      "User-Agent": "EsportsCoachDashboard/0.9"
+    }
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try { json = JSON.parse(text); } catch { /* not JSON */ }
+  return {
+    url,
+    status: res.status,
+    ok: res.ok,
+    contentType: res.headers.get("content-type"),
+    bodyPreview: text.slice(0, 4000),
+    json
+  };
 }
 
 export async function getBenchmarkProgress(
   benchmarkId: number,
   steamId: string
 ): Promise<BenchmarkProgressResponse> {
-  const url = `${BASE}/benchmarks/player-progress-rank-benchmark?benchmarkId=${benchmarkId}&steamId=${steamId}&page=0&max=100`;
-  const res = await fetch(url, { next: { revalidate: 0 } });
-  if (!res.ok) {
-    throw new Error(`KovaaK's benchmark-progress request failed (${res.status})`);
+  const diagnostic = await getBenchmarkProgressDiagnostic(benchmarkId, steamId);
+  if (!diagnostic.ok) {
+    throw new Error(
+      `KovaaK's returned HTTP ${diagnostic.status}. ${diagnostic.bodyPreview.slice(0, 500)}`
+    );
   }
-  return res.json();
+  if (!diagnostic.json || typeof diagnostic.json !== "object") {
+    throw new Error(`KovaaK's returned a non-JSON response: ${diagnostic.bodyPreview.slice(0, 500)}`);
+  }
+  return diagnostic.json as BenchmarkProgressResponse;
 }
 
-/** Flattens the nested category->scenario response into {scenarioName: score}. */
+export async function getBenchmarkProgressDiagnostic(
+  benchmarkId: number,
+  steamId: string
+): Promise<KovaaKsDiagnostic> {
+  const url = new URL(`${BASE}/benchmarks/player-progress-rank-benchmark`);
+  url.searchParams.set("benchmarkId", String(benchmarkId));
+  url.searchParams.set("steamId", steamId);
+  url.searchParams.set("page", "0");
+  url.searchParams.set("max", "100");
+  return fetchJson(url.toString());
+}
+
 export function flattenScenarioScores(
   progress: BenchmarkProgressResponse
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const category of Object.values(progress.categories)) {
-    for (const [name, s] of Object.entries(category.scenarios)) {
-      out[name] = s.score;
+  for (const category of Object.values(progress.categories ?? {})) {
+    for (const [name, s] of Object.entries(category.scenarios ?? {})) {
+      if (typeof s.score === "number") out[name] = s.score;
     }
   }
   return out;
 }
 
-/**
- * Fallback path if a benchmark isn't registered under a clean benchmarkId:
- * search a scenario by exact name to get its leaderboardId, then you'd
- * still need a KovaaK's webapp *username* (not steamId) to pull an
- * individual score via /user/scenario/total-play - see README for the
- * unresolved steamId -> username step. Prefer getBenchmarkProgress above
- * whenever the benchmarkId is known.
- */
 export async function searchScenarioLeaderboardId(
   scenarioName: string
 ): Promise<number | null> {
-  const url = `${BASE}/scenario/popular?page=0&max=20&scenarioNameSearch=${encodeURIComponent(
-    scenarioName
-  )}`;
-  const res = await fetch(url, { next: { revalidate: 3600 } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const exact = (data.data as { scenarioName: string; leaderboardId: number }[]).find(
+  const url = `${BASE}/scenario/popular?page=0&max=20&scenarioNameSearch=${encodeURIComponent(scenarioName)}`;
+  const diagnostic = await fetchJson(url);
+  if (!diagnostic.ok || !diagnostic.json || typeof diagnostic.json !== "object") return null;
+  const data = diagnostic.json as { data?: { scenarioName: string; leaderboardId: number }[] };
+  const exact = (data.data ?? []).find(
     (s) => s.scenarioName.toLowerCase() === scenarioName.toLowerCase()
   );
   return exact?.leaderboardId ?? data.data?.[0]?.leaderboardId ?? null;

@@ -158,3 +158,13 @@ benchmarks - a research project, not a UI feature. Not started.
    snapshot per benchmark).
 4. Swap `lib/store.ts` for a real database before deploying anywhere
    serverless.
+
+## KovaaK's diagnostic mode
+
+The client page now includes **Diagnose KovaaK's connection**. It calls the same
+Benchmark Tracker endpoint as sync but returns the HTTP status, benchmark ID,
+SteamID, response content type, scenario count, scenario scores, and a bounded
+raw-response preview. This is intentional: a public leaderboard score proves
+KovaaK's has the data, so a zero-score result must be debugged at the request /
+identity / benchmark-ID layer rather than silently treated as a legitimate empty
+result.
