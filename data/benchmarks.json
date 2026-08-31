@@ -1,0 +1,65 @@
+[
+  {
+    "id": "viscose-s2-easier",
+    "benchmarkName": "Viscose Benchmarks S2",
+    "difficultyName": "Easier",
+    "kovaaksBenchmarkId": 2355,
+    "customFormula": "viscose",
+    "viscoseDifficultyKey": "easier",
+    "voltaicDifficultyKey": null
+  },
+  {
+    "id": "viscose-s2-medium",
+    "benchmarkName": "Viscose Benchmarks S2",
+    "difficultyName": "Medium",
+    "kovaaksBenchmarkId": 2336,
+    "customFormula": "viscose",
+    "viscoseDifficultyKey": "medium",
+    "voltaicDifficultyKey": null
+  },
+  {
+    "id": "viscose-s2-hard",
+    "benchmarkName": "Viscose Benchmarks S2",
+    "difficultyName": "Hard",
+    "kovaaksBenchmarkId": 2337,
+    "customFormula": "viscose",
+    "viscoseDifficultyKey": "hard",
+    "voltaicDifficultyKey": null
+  },
+  {
+    "id": "viscose-s2-expert",
+    "benchmarkName": "Viscose Benchmarks S2",
+    "difficultyName": "Expert",
+    "kovaaksBenchmarkId": 2338,
+    "customFormula": null,
+    "viscoseDifficultyKey": null,
+    "voltaicDifficultyKey": null
+  },
+  {
+    "id": "voltaic-s5.5-novice",
+    "benchmarkName": "Voltaic S5.5",
+    "difficultyName": "Novice",
+    "kovaaksBenchmarkId": 2835,
+    "customFormula": "voltaic",
+    "viscoseDifficultyKey": null,
+    "voltaicDifficultyKey": "novice"
+  },
+  {
+    "id": "voltaic-s5.5-intermediate",
+    "benchmarkName": "Voltaic S5.5",
+    "difficultyName": "Intermediate",
+    "kovaaksBenchmarkId": 2834,
+    "customFormula": "voltaic",
+    "viscoseDifficultyKey": null,
+    "voltaicDifficultyKey": "intermediate"
+  },
+  {
+    "id": "voltaic-s5.5-advanced",
+    "benchmarkName": "Voltaic S5.5",
+    "difficultyName": "Advanced",
+    "kovaaksBenchmarkId": 2070,
+    "customFormula": "voltaic",
+    "viscoseDifficultyKey": null,
+    "voltaicDifficultyKey": "advanced"
+  }
+]
