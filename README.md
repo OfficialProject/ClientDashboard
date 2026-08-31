@@ -105,6 +105,25 @@ Both decoded formulas produce a genuinely continuous, trend-able score:
   `category_rank` index as the score - coarse (whole-tier jumps only, no
   within-tier progress), since that's all the native response provides.
 
+## Home-screen install (PWA)
+
+Not a native app - a real limitation worth restating: this is a web app,
+served over HTTP by `npm run dev`/`next start`, running in Safari/Chrome.
+What's added here closes most of the "feels like an app" gap cheaply:
+
+- `app/manifest.ts` - generates `/manifest.webmanifest` (name, icons,
+  `display: "standalone"` so it opens without browser chrome).
+- `public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` - placeholder
+  icons (teal "AC" mark matching the app's palette) - swap these for real
+  branding whenever you have some.
+- `app/layout.tsx` - wires the manifest + Apple-specific meta (`appleWebApp`
+  capable, translucent status bar) so iOS Safari's "Add to Home Screen"
+  produces a standalone icon instead of a bookmark.
+
+What this does NOT get you: offline support, push notifications, or an App
+Store listing. That's a genuinely different, larger project (Swift/SwiftUI
+or React Native) if it's ever actually needed.
+
 ## Run
 
 ```bash
