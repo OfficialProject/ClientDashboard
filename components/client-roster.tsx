@@ -1,10 +1,21 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 
 export default function ClientRoster({ clients }: { clients: Client[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setSyncing(true);
+    fetch("/api/kovaaks/sync-all", { method: "POST" })
+      .then(() => router.refresh())
+      .finally(() => setSyncing(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -17,7 +28,7 @@ export default function ClientRoster({ clients }: { clients: Client[] }) {
 
   return (
     <>
-      <div className="searchbar" style={{ marginBottom: 16 }}>
+      <div className="searchbar" style={{ marginBottom: 8 }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4.3-4.3" />
@@ -28,6 +39,11 @@ export default function ClientRoster({ clients }: { clients: Client[] }) {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      {syncing && (
+        <div style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 8 }}>
+          Refreshing scores...
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="empty-state">

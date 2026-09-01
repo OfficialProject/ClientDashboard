@@ -125,18 +125,19 @@ should (unchanged from before).
 
 ## Auto-sync
 
-- **Assigning a benchmark now syncs immediately** - no separate manual tap
-  needed for the first snapshot.
+- **Roster page triggers a bulk refresh on load** (`/api/kovaaks/sync-all`)
+  - every client with an assigned benchmark gets synced *before* you tap
+  into any specific profile, not after. Throttled to skip anyone synced
+  within the last 2 minutes, so repeatedly reopening the roster doesn't
+  hammer KovaaK's API for no reason.
+- **Assigning a benchmark syncs immediately** on the client's own page too.
 - **Live polling while a client's page is open** - re-syncs every 5 minutes
-  automatically as long as you're on that page and a benchmark is assigned.
-  Stops when you navigate away (interval is cleaned up on unmount).
+  as a background top-up during a long session.
 
-What this is NOT: true background auto-refresh that updates scores even
-when nobody has the dashboard open. That needs the app running on
-always-on hosting plus a real database instead of the local JSON file
-store (`lib/store.ts`) - both already listed under Next steps, neither
-started. Polling-while-open covers the actual coaching-session use case
-without taking on that infrastructure work.
+What this is NOT: true always-on background refresh with nobody looking at
+the app at all. That needs always-on hosting plus a real database instead
+of the local JSON file store (`lib/store.ts`) - both already listed under
+Next steps, neither started.
 
 ## Add-client flow
 
