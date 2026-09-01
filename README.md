@@ -108,6 +108,36 @@ whole-tier jumps anymore.
 **Voltaic hasn't been live-tested at all yet** - still on its decoded
 formula, unverified against a real response the same way Viscose just was.
 
+## Known issue found via live testing: Voltaic Advanced gave negative energy for unplayed scenarios
+
+Live use surfaced a real bug in the decoded Voltaic formula, in the
+Advanced-difficulty backward-extrapolation case specifically. The actual
+sheet formula's match array is `{0, H-(I-H), H, I, J, K}` - **six**
+breakpoints, including an explicit `0 score -> 0 energy` anchor before the
+synthetic floor. The original implementation only had five breakpoints
+(missing that leading zero-anchor), so an unplayed Advanced scenario
+(score 0) fell into the synthetic-floor segment and extrapolated
+*backward* into negative energy instead of hitting an exact 0 match.
+Fixed in `lib/voltaic.ts`'s `scenarioEnergy()` - verified against the
+sheet's own thresholds: score 0 now gives energy 0 exactly, and the
+threshold-boundary values still land exactly where the sheet says they
+should (unchanged from before).
+
+## Auto-sync
+
+- **Assigning a benchmark now syncs immediately** - no separate manual tap
+  needed for the first snapshot.
+- **Live polling while a client's page is open** - re-syncs every 5 minutes
+  automatically as long as you're on that page and a benchmark is assigned.
+  Stops when you navigate away (interval is cleaned up on unmount).
+
+What this is NOT: true background auto-refresh that updates scores even
+when nobody has the dashboard open. That needs the app running on
+always-on hosting plus a real database instead of the local JSON file
+store (`lib/store.ts`) - both already listed under Next steps, neither
+started. Polling-while-open covers the actual coaching-session use case
+without taking on that infrastructure work.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

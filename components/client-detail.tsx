@@ -27,6 +27,18 @@ export default function ClientDetail({ client }: { client: Client }) {
       .then((d) => setBenchmarks(d.benchmarks ?? []));
   }, []);
 
+  // Live auto-refresh while this page is open - only while open, not a true
+  // background job (that needs always-on hosting + a real database, not
+  // done yet). Polls every 5 minutes, only when a benchmark is assigned.
+  useEffect(() => {
+    if (!assignedBenchmarkId) return;
+    const interval = setInterval(() => {
+      syncBenchmark(assignedBenchmarkId);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedBenchmarkId]);
+
   async function saveRanks() {
     setSavingRanks(true);
     await fetch(`/api/clients/${client.id}`, {
@@ -51,17 +63,19 @@ export default function ClientDetail({ client }: { client: Client }) {
       body: JSON.stringify({ assignedBenchmarkId: id || null }),
     });
     setSavingBenchmark(false);
+    if (id) await syncBenchmark(id); // assigning a benchmark immediately pulls its first snapshot
     router.refresh();
   }
 
-  async function syncBenchmark() {
-    if (!assignedBenchmarkId) return;
+  async function syncBenchmark(benchmarkId?: string) {
+    const targetId = benchmarkId ?? assignedBenchmarkId;
+    if (!targetId) return;
     setSyncing(true);
     setSyncError("");
     const res = await fetch("/api/kovaaks/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId: client.id, benchmarkId: assignedBenchmarkId }),
+      body: JSON.stringify({ clientId: client.id, benchmarkId: targetId }),
     });
     setSyncing(false);
     if (!res.ok) {
@@ -201,7 +215,7 @@ export default function ClientDetail({ client }: { client: Client }) {
             <button
               className="sync-button"
               style={{ marginTop: 12 }}
-              onClick={syncBenchmark}
+              onClick={() => syncBenchmark()}
               disabled={syncing}
             >
               {syncing ? "Syncing from KovaaK's..." : "Sync from KovaaK's"}

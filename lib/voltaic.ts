@@ -79,12 +79,27 @@ function scenarioEnergy(
   const [h, i] = thresholds;
   const prev = prevDifficulty(difficulty);
 
-  const floorScore = difficulty === "advanced" ? h - (i - h) : 0;
-  const floorEnergy = difficulty === "advanced" && prev ? voltaicData[prev].energyLevels[3] : 0;
+  let breakScores: number[];
+  let breakEnergies: number[];
 
-  const breakScores = [floorScore, ...thresholds];
-  const breakEnergies = [floorEnergy, ...def.energyLevels];
+  if (difficulty === "advanced" && prev) {
+    // Real formula's match array is {0, H-(I-H), H, I, J, K} - SIX points.
+    // The explicit 0->0 anchor matters: without it, an unplayed scenario
+    // (score 0) falls into the synthetic-floor segment and extrapolates
+    // backward into negative energy instead of hitting an exact 0 match.
+    const syntheticFloor = h - (i - h);
+    breakScores = [0, syntheticFloor, ...thresholds];
+    breakEnergies = [0, prevCeiling(prev), ...def.energyLevels];
+  } else {
+    breakScores = [0, ...thresholds];
+    breakEnergies = [0, ...def.energyLevels];
+  }
+
   return interpolateEnergy(score, breakScores, breakEnergies);
+}
+
+function prevCeiling(prev: VoltaicDifficulty): number {
+  return voltaicData[prev].energyLevels[3];
 }
 
 function groupCap(difficulty: VoltaicDifficulty): number {
