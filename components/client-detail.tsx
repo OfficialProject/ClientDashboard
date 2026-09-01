@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Client } from "@/lib/types";
 import type { BenchmarkDef } from "@/lib/benchmarks";
 import SkillBreakdown from "@/components/skill-breakdown";
+import SkillSummary from "@/components/skill-summary";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function ClientDetail({ client }: { client: Client }) {
 
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+  const [showFullBreakdown, setShowFullBreakdown] = useState(false);
 
   useEffect(() => {
     fetch("/api/benchmarks")
@@ -196,16 +198,24 @@ export default function ClientDetail({ client }: { client: Client }) {
 
         {assignedBenchmarkId && (
           <>
-            {progress ? (
+            {progress && history ? (
               <>
                 <div className="rank-row" style={{ margin: "14px 0 12px" }}>
                   <span className="rank-chip viscose">{progress.overallRankName}</span>
                   <span style={{ color: "var(--text-dim)", fontSize: 12, alignSelf: "center" }}>
                     synced {new Date(progress.syncedAt).toLocaleString()}
-                    {history && history.length > 1 ? ` · ${history.length} syncs on record` : ""}
+                    {history.length > 1 ? ` · ${history.length} syncs on record` : ""}
                   </span>
                 </div>
-                <SkillBreakdown latest={progress} previous={previousProgress} />
+                <SkillSummary history={history} />
+                <button
+                  className="sort-toggle"
+                  style={{ marginTop: 14, marginBottom: showFullBreakdown ? 10 : 0 }}
+                  onClick={() => setShowFullBreakdown(!showFullBreakdown)}
+                >
+                  {showFullBreakdown ? "Hide full breakdown" : "See full breakdown"}
+                </button>
+                {showFullBreakdown && <SkillBreakdown latest={progress} previous={previousProgress} />}
               </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, margin: "12px 0" }}>

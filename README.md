@@ -139,6 +139,28 @@ the app at all. That needs always-on hosting plus a real database instead
 of the local JSON file store (`lib/store.ts`) - both already listed under
 Next steps, neither started.
 
+## Leetify-style profile page (functionality first, styling later)
+
+Client detail page now has a layered hierarchy instead of always showing
+every category flat:
+
+- **Hero row** - current overall rank + the single weakest category, at a
+  glance, no scrolling needed.
+- **Strengths / Weaknesses** (`components/skill-summary.tsx`) - top 3
+  best and worst categories only, each with a real trend line built from
+  the full sync history (`benchmarkHistory`), not just a two-point delta.
+  This is the first thing that actually visualizes the history we've been
+  storing since v0.8 - it existed as data but nothing rendered it as a
+  trend until now.
+- **Full breakdown** - the existing sortable all-categories list
+  (`skill-breakdown.tsx`), now collapsed behind a "See full breakdown"
+  toggle instead of always-on. Solves the "everything shown at once"
+  problem directly.
+
+Styling is intentionally plain right now - functional layout using
+existing tokens, no polish pass yet. That's the explicit next step once
+the underlying structure is confirmed to be the right one.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted
