@@ -124,6 +124,30 @@ What this does NOT get you: offline support, push notifications, or an App
 Store listing. That's a genuinely different, larger project (Swift/SwiftUI
 or React Native) if it's ever actually needed.
 
+## Steam identity resolver
+
+`lib/steam.ts`'s `resolveToSteamId64()` normalizes any of three input
+formats to a raw SteamID64 before hitting APIs that are strict about it
+(KovaaK's webapp-backend rejects anything that isn't exactly `/^\d{17}$/`):
+
+- Raw SteamID64 - passed through as-is, no network call.
+- Vanity URL slug or full `steamcommunity.com/id/...`/`/profiles/...` URL -
+  resolved via Steam's official `ResolveVanityURL`.
+
+**Bare display names are explicitly not supported** - deliberate, not an
+oversight. Steam's Web API has no display-name lookup at all (only vanity
+URL resolution), and display names aren't even unique across accounts. The
+only way to do this at all is scraping Steam Community's unofficial search
+page - same fragility class as the client-rendered pages that broke the
+evxl-scraping approach earlier in this build - so it was left out rather
+than built on a foundation known to be unreliable. Passing a bare name
+(anything with a space) returns a clear error telling you to paste a
+profile link or vanity URL instead of a generic "not found."
+
+Used automatically wherever a client's stored `steamId` is sent to
+KovaaK's (`lib/unified-progress.ts`), and exposed standalone at
+`/api/steam/resolve-any?input=...` for quick manual lookups.
+
 ## Run
 
 ```bash
@@ -158,13 +182,3 @@ benchmarks - a research project, not a UI feature. Not started.
    snapshot per benchmark).
 4. Swap `lib/store.ts` for a real database before deploying anywhere
    serverless.
-
-## KovaaK's diagnostic mode
-
-The client page now includes **Diagnose KovaaK's connection**. It calls the same
-Benchmark Tracker endpoint as sync but returns the HTTP status, benchmark ID,
-SteamID, response content type, scenario count, scenario scores, and a bounded
-raw-response preview. This is intentional: a public leaderboard score proves
-KovaaK's has the data, so a zero-score result must be debugged at the request /
-identity / benchmark-ID layer rather than silently treated as a legitimate empty
-result.

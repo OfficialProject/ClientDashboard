@@ -2,6 +2,7 @@ import type { BenchmarkDef } from "./benchmarks";
 import type { UnifiedBenchmarkProgress } from "./types";
 import { computeViscoseProgress } from "./viscose";
 import { computeVoltaicProgress } from "./voltaic";
+import { resolveToSteamId64 } from "./steam";
 import {
   getBenchmarkProgress,
   flattenScenarioScores,
@@ -91,7 +92,8 @@ export async function syncBenchmarkProgress(
   if (!def.kovaaksBenchmarkId) {
     throw new Error(`${def.benchmarkName} (${def.difficultyName}) has no kovaaksBenchmarkId set yet.`);
   }
-  const progress = await getBenchmarkProgress(def.kovaaksBenchmarkId, steamId);
+  const resolvedSteamId = await resolveToSteamId64(steamId);
+  const progress = await getBenchmarkProgress(def.kovaaksBenchmarkId, resolvedSteamId);
   const now = new Date().toISOString();
   if (def.customFormula === "viscose") return fromViscose(def, progress, now);
   if (def.customFormula === "voltaic") return fromVoltaic(def, progress, now);

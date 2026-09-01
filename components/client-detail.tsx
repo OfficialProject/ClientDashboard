@@ -17,7 +17,6 @@ export default function ClientDetail({ client }: { client: Client }) {
   const [savingBenchmark, setSavingBenchmark] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
-  const [diagnostic, setDiagnostic] = useState<any>(null);
 
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -71,18 +70,6 @@ export default function ClientDetail({ client }: { client: Client }) {
       return;
     }
     router.refresh();
-  }
-
-  async function runKovaaksDiagnostic() {
-    if (!assignedBenchmarkId) return;
-    setDiagnostic(null);
-    const res = await fetch("/api/kovaaks/diagnostic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId: client.id, benchmarkId: assignedBenchmarkId }),
-    });
-    const data = await res.json();
-    setDiagnostic(data);
   }
 
   async function saveNote() {
@@ -221,18 +208,6 @@ export default function ClientDetail({ client }: { client: Client }) {
             </button>
             {syncError && (
               <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>{syncError}</div>
-            )}
-            <button
-              className="sync-button"
-              style={{ marginTop: 8, opacity: 0.8 }}
-              onClick={runKovaaksDiagnostic}
-            >
-              Diagnose KovaaK's connection
-            </button>
-            {diagnostic && (
-              <pre style={{ marginTop: 10, padding: 10, overflowX: "auto", background: "var(--panel-alt)", borderRadius: 8, fontSize: 10, whiteSpace: "pre-wrap" }}>
-                {JSON.stringify(diagnostic, null, 2)}
-              </pre>
             )}
           </>
         )}
