@@ -53,6 +53,7 @@ export async function createClient(input: {
     premierRating: null,
     faceitLevel: null,
     faceitElo: null,
+    kovaaksUsername: null,
     assignedBenchmarkId: null,
     benchmarkHistory: {},
     notes: [],

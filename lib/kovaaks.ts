@@ -64,14 +64,38 @@ export function flattenScenarioScores(
   return out;
 }
 
-/**
- * Fallback path if a benchmark isn't registered under a clean benchmarkId:
- * search a scenario by exact name to get its leaderboardId, then you'd
- * still need a KovaaK's webapp *username* (not steamId) to pull an
- * individual score via /user/scenario/total-play - see README for the
- * unresolved steamId -> username step. Prefer getBenchmarkProgress above
- * whenever the benchmarkId is known.
- */
+export interface AccountNameMatch {
+  steamId?: string | null;
+  username?: string | null;
+  steamAccountName?: string | null;
+}
+
+/** Searches KovaaK's account index by a text query (typically a Steam display name). */
+export async function searchAccountNames(query: string): Promise<AccountNameMatch[]> {
+  const url = `${BASE}/leaderboard/global/search/account-names?username=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : data?.data ?? [];
+}
+
+export interface RecentActivityEntry {
+  timestamp: string;
+  type: string;
+  scenarioName: string;
+  score: number;
+  leaderboardId: number;
+}
+
+/** Real per-play activity log, newest first - requires a resolved webapp username, not a steamId. */
+export async function getRecentActivity(webappUsername: string): Promise<RecentActivityEntry[]> {
+  const url = `${BASE}/user/activity/recent?username=${encodeURIComponent(webappUsername)}`;
+  const res = await fetch(url, { next: { revalidate: 0 } });
+  if (!res.ok) throw new Error(`KovaaK's recent-activity request failed (${res.status})`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : data?.data ?? [];
+}
+
 export async function searchScenarioLeaderboardId(
   scenarioName: string
 ): Promise<number | null> {

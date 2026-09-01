@@ -161,6 +161,40 @@ Styling is intentionally plain right now - functional layout using
 existing tokens, no polish pass yet. That's the explicit next step once
 the underlying structure is confirmed to be the right one.
 
+## Real session-level activity (not just snapshot-in-time)
+
+Traced through actual working source code (not docs/guesswork) to confirm
+a genuine per-play activity feed exists on KovaaK's webapp-backend:
+
+```
+GET /webapp-backend/user/activity/recent?username=<webapp username>
+-> [{ timestamp, scenarioName, score, leaderboardId, ... }]
+```
+
+This is the real thing Leetify-style tools need - actual play-by-play
+history with timestamps, not just "current best score as of last sync."
+Everything built before this point (`benchmarkHistory`) was snapshot-level
+- one point per manual/auto sync, not per session played.
+
+**The steamId -> webapp username gap is closed too.** The account-search
+endpoint (`/webapp-backend/leaderboard/global/search/account-names`) takes
+a text query, not a steamId - so `lib/kovaaks-identity.ts` searches by the
+client's known Steam display name, then filters the candidate matches down
+to the one whose `steamId` matches the client we already have on file.
+Traced from a working open-source tool (KovaaksCompare) that does exactly
+this - not guessed. Resolved once, cached on `client.kovaaksUsername`.
+
+**Not yet live-tested** - same caveat as everything sourced from this
+unofficial API: contracts are transcribed from real source code, but this
+specific pair of endpoints hasn't been hit from a live environment yet.
+First real activity fetch should be treated as a smoke test.
+
+`components/recent-activity.tsx` is a deliberately minimal first cut -
+last 15 plays, scenario + score + relative time, no chart or grouping yet.
+Once this is confirmed working against real data, the next step is
+folding real per-session timestamps into the trend sparklines instead of
+relying only on manual-sync-interval snapshots.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

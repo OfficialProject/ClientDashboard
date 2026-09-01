@@ -5,6 +5,7 @@ import type { Client } from "@/lib/types";
 import type { BenchmarkDef } from "@/lib/benchmarks";
 import SkillBreakdown from "@/components/skill-breakdown";
 import SkillSummary from "@/components/skill-summary";
+import RecentActivity from "@/components/recent-activity";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -235,6 +236,11 @@ export default function ClientDetail({ client }: { client: Client }) {
             )}
           </>
         )}
+      </div>
+
+      <div className="panel">
+        <h2>Recent Activity</h2>
+        <RecentActivity clientId={client.id} />
       </div>
 
       <div className="panel">

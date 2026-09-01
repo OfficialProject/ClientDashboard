@@ -59,6 +59,7 @@ export interface Client {
   premierRating: number | null;
   faceitLevel: number | null;
   faceitElo: number | null;
+  kovaaksUsername: string | null; // resolved lazily via lib/kovaaks-identity.ts, cached once found
   assignedBenchmarkId: string | null; // registry id of the benchmark they're currently working on
   benchmarkHistory: Record<string, UnifiedBenchmarkProgress[]>; // keyed by registry id, oldest -> newest; latest = [].at(-1)
   notes: Note[];
