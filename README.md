@@ -75,6 +75,39 @@ To add a benchmark: append an entry to `data/benchmarks.json` with its
 `kovaaksBenchmarkId`. If a real spreadsheet is available for it later,
 decode it the same way Viscose was and add a `"customFormula"` entry.
 
+## Known issue found via live testing: Viscose has drifted from the spreadsheet
+
+First real sync (Easier, benchmarkId 2335) surfaced something the sandbox
+could never have caught: **the live benchmark has been revised since the
+spreadsheet was made.** The real API returns a **9-tier** ladder (Lemming,
+Hare, Ermine, **Puffin**, Penguin, Fox, Mammoth, Orca, Seal) - the sheet
+only had 8, no Puffin - and several scenario names differ outright (live:
+"Whisphere Viscose Easier"; sheet: "WhisphereRawControl Larger + Slowed").
+That's why syncing returned all zeros: exact-name matching against the
+stale sheet data matched nothing.
+
+Fix: Easier, Medium, and Hard are all switched to `customFormula: null`
+(native) as of this build - Medium/Hard weren't tested live, but came from
+the same spreadsheet snapshot, so treated as equally suspect rather than
+waiting to find out the hard way. The live response already computes
+correct ranks server-side using the *current* tier ladder, and that
+ladder still uses Viscose's real names, so nothing is lost by trusting it
+here instead of the decoded formula. `lib/viscose.ts` and
+`lib/viscose-data.json` are left in the repo (the math itself was verified
+correct against what it was built from), but nothing in the registry uses
+them right now. If Viscose data is ever needed again, it'd mean sourcing a
+current spreadsheet and re-running the same extraction process, not
+reusing what's there today.
+
+Also improved while fixing this: the native adapter now uses each
+category's continuous `benchmark_progress` value as its trend score
+instead of the coarse `category_rank` index - matches Voltaic's energy
+granularity, so trends on native-path benchmarks aren't limited to
+whole-tier jumps anymore.
+
+**Voltaic hasn't been live-tested at all yet** - still on its decoded
+formula, unverified against a real response the same way Viscose just was.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

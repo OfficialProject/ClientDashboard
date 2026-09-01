@@ -68,17 +68,17 @@ function fromNative(
   progress: BenchmarkProgressResponse,
   now: string
 ): UnifiedBenchmarkProgress {
-  const rankName = (idx: number) => progress.ranks?.[idx]?.name ?? `Rank ${idx}`;
+  const rankName = (idx: number) => progress.ranks?.[idx]?.name?.trim() ?? `Rank ${idx}`;
   return {
     benchmarkId: def.id,
     benchmarkName: def.benchmarkName,
     difficultyName: def.difficultyName,
     overallRankName: rankName(progress.overall_rank),
     groups: Object.entries(progress.categories).map(([name, c]) => ({
-      category: name,
-      subcategory: name, // KovaaK's native response doesn't split into subcategories
+      category: name.trim(),
+      subcategory: name.trim(), // KovaaK's native response doesn't split into subcategories
       rankName: rankName(c.category_rank),
-      score: c.category_rank, // coarse - just the rank index, not a fine-grained score
+      score: c.benchmark_progress, // continuous - matches Voltaic's energy granularity, unlike the coarse rank index
     })),
     scenarioScores: flattenScenarioScores(progress),
     syncedAt: now,

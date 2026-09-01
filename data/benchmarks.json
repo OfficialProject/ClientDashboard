@@ -4,8 +4,8 @@
     "benchmarkName": "Viscose Benchmarks S2",
     "difficultyName": "Easier",
     "kovaaksBenchmarkId": 2335,
-    "customFormula": "viscose",
-    "viscoseDifficultyKey": "easier",
+    "customFormula": null,
+    "viscoseDifficultyKey": null,
     "voltaicDifficultyKey": null
   },
   {
@@ -13,8 +13,8 @@
     "benchmarkName": "Viscose Benchmarks S2",
     "difficultyName": "Medium",
     "kovaaksBenchmarkId": 2336,
-    "customFormula": "viscose",
-    "viscoseDifficultyKey": "medium",
+    "customFormula": null,
+    "viscoseDifficultyKey": null,
     "voltaicDifficultyKey": null
   },
   {
@@ -22,8 +22,8 @@
     "benchmarkName": "Viscose Benchmarks S2",
     "difficultyName": "Hard",
     "kovaaksBenchmarkId": 2337,
-    "customFormula": "viscose",
-    "viscoseDifficultyKey": "hard",
+    "customFormula": null,
+    "viscoseDifficultyKey": null,
     "voltaicDifficultyKey": null
   },
   {
