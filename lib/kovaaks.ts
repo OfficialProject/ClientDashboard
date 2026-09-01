@@ -46,7 +46,8 @@ export async function getBenchmarkProgress(
   const url = `${BASE}/benchmarks/player-progress-rank-benchmark?benchmarkId=${benchmarkId}&steamId=${steamId}&page=0&max=100`;
   const res = await fetch(url, { next: { revalidate: 0 } });
   if (!res.ok) {
-    throw new Error(`KovaaK's benchmark-progress request failed (${res.status})`);
+    const body = await res.text().catch(() => "");
+    throw new Error(`KovaaK's benchmark-progress request failed (${res.status}): ${body || "no response body"}`);
   }
   return res.json();
 }
@@ -91,7 +92,10 @@ export interface RecentActivityEntry {
 export async function getRecentActivity(webappUsername: string): Promise<RecentActivityEntry[]> {
   const url = `${BASE}/user/activity/recent?username=${encodeURIComponent(webappUsername)}`;
   const res = await fetch(url, { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error(`KovaaK's recent-activity request failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`KovaaK's recent-activity request failed (${res.status}): ${body || "no response body"}`);
+  }
   const data = await res.json();
   return Array.isArray(data) ? data : data?.data ?? [];
 }
