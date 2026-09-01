@@ -78,10 +78,15 @@ export default function SkillSummary({ history }: { history: UnifiedBenchmarkPro
           <div className="summary-heading">Strengths</div>
           {strengths.map((r, i) => (
             <div className="summary-row" key={i}>
-              <div className="summary-row-label">{r.label}</div>
+              <div className="summary-row-main">
+                <div className="summary-row-label">{r.label}</div>
+                <div className="summary-row-rank">
+                  {r.rankName} <span className="summary-row-score">({Math.round(r.score)})</span>
+                </div>
+              </div>
               <Sparkline values={r.series} />
               <div className="summary-row-trend up">
-                {r.trend === null ? "" : `${r.trend > 0 ? "+" : ""}${Math.round(r.trend)}`}
+                {r.trend === null ? "—" : `${r.trend > 0 ? "+" : ""}${Math.round(r.trend)}`}
               </div>
             </div>
           ))}
@@ -90,10 +95,15 @@ export default function SkillSummary({ history }: { history: UnifiedBenchmarkPro
           <div className="summary-heading">Weaknesses</div>
           {weaknesses.map((r, i) => (
             <div className="summary-row" key={i}>
-              <div className="summary-row-label">{r.label}</div>
+              <div className="summary-row-main">
+                <div className="summary-row-label">{r.label}</div>
+                <div className="summary-row-rank">
+                  {r.rankName} <span className="summary-row-score">({Math.round(r.score)})</span>
+                </div>
+              </div>
               <Sparkline values={r.series} />
               <div className={`summary-row-trend ${r.trend !== null && r.trend < 0 ? "down" : ""}`}>
-                {r.trend === null ? "" : `${r.trend > 0 ? "+" : ""}${Math.round(r.trend)}`}
+                {r.trend === null ? "—" : `${r.trend > 0 ? "+" : ""}${Math.round(r.trend)}`}
               </div>
             </div>
           ))}
