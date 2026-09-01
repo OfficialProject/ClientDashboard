@@ -3,7 +3,7 @@
     "id": "viscose-s2-easier",
     "benchmarkName": "Viscose Benchmarks S2",
     "difficultyName": "Easier",
-    "kovaaksBenchmarkId": 2355,
+    "kovaaksBenchmarkId": 2335,
     "customFormula": "viscose",
     "viscoseDifficultyKey": "easier",
     "voltaicDifficultyKey": null
