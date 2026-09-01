@@ -193,11 +193,17 @@ endpoint and it does NOT work ("Player does not exist") despite looking
 like a plausible substitute - it is genuinely not interchangeable with the
 real webapp username. So: this feature has a real, unavoidable coverage
 gap. `lib/kovaaks-identity.ts` now returns `null` cleanly in that case
-rather than guessing with a fallback that's confirmed broken, and the
-result (found, or confirmed absent) is cached on `client.kovaaksUsername`
-either way, so a client without one isn't re-searched on every page load.
-The activity panel shows a clear explanation, not a raw API error, when
-this happens - their benchmark scores/trends are unaffected either way.
+rather than guessing with a fallback that's confirmed broken.
+
+**Cache self-heals now too.** Live testing found a second-order bug: a
+client synced *before* the fallback fix above got a bad value cached
+permanently in `client.kovaaksUsername` (the old buggy resolver's
+`steamAccountName` fallback), and since the caching logic only resolves
+when the field is `null`, that bad value was stuck forever - the code fix
+alone didn't repair already-cached bad data. `/api/kovaaks/activity` now
+re-resolves fresh if the cached username fails against the live API,
+clears/replaces the cache accordingly, and resolves cleanly within the
+same request rather than requiring a second page load or manual fix.
 
 `components/recent-activity.tsx` is a deliberately minimal first cut -
 last 15 plays, scenario + score + relative time, no chart or grouping yet.
