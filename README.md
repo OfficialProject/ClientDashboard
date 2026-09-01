@@ -184,10 +184,20 @@ to the one whose `steamId` matches the client we already have on file.
 Traced from a working open-source tool (KovaaksCompare) that does exactly
 this - not guessed. Resolved once, cached on `client.kovaaksUsername`.
 
-**Not yet live-tested** - same caveat as everything sourced from this
-unofficial API: contracts are transcribed from real source code, but this
-specific pair of endpoints hasn't been hit from a live environment yet.
-First real activity fetch should be treated as a smoke test.
+**Confirmed live limitation (not a bug):** the activity feed only works for
+players who've actually set a username on their kovaaks.com profile. Many
+players just play through Steam and never touch the webapp - for them,
+the account-search response has `username: null`. Tested the obvious
+fallback (`steamAccountName`) directly against the live activity
+endpoint and it does NOT work ("Player does not exist") despite looking
+like a plausible substitute - it is genuinely not interchangeable with the
+real webapp username. So: this feature has a real, unavoidable coverage
+gap. `lib/kovaaks-identity.ts` now returns `null` cleanly in that case
+rather than guessing with a fallback that's confirmed broken, and the
+result (found, or confirmed absent) is cached on `client.kovaaksUsername`
+either way, so a client without one isn't re-searched on every page load.
+The activity panel shows a clear explanation, not a raw API error, when
+this happens - their benchmark scores/trends are unaffected either way.
 
 `components/recent-activity.tsx` is a deliberately minimal first cut -
 last 15 plays, scenario + score + relative time, no chart or grouping yet.

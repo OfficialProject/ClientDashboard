@@ -10,16 +10,20 @@ export async function GET(request: NextRequest) {
   const client = await getClient(clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
+  // kovaaksUsername: null = never checked, "" = checked and confirmed absent, string = resolved
   let username = client.kovaaksUsername;
-  if (!username) {
-    username = await resolveKovaaksUsername(client.steamId, client.steamName);
-    if (!username) {
-      return NextResponse.json(
-        { error: "Couldn't match this client to a KovaaK's account - activity data unavailable." },
-        { status: 404 }
-      );
-    }
+  if (username === null) {
+    username = (await resolveKovaaksUsername(client.steamId, client.steamName)) ?? "";
     await updateClient(clientId, { kovaaksUsername: username });
+  }
+  if (!username) {
+    return NextResponse.json(
+      {
+        error:
+          "This client hasn't set a username on their kovaaks.com profile, so activity history isn't available for them - this is a real platform limitation, not a bug. Their benchmark scores and trends still work fine.",
+      },
+      { status: 404 }
+    );
   }
 
   try {
