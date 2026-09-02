@@ -127,7 +127,7 @@ export function getScenarioMeta(progress: BenchmarkProgressResponse): Record<str
   const out: Record<string, ScenarioMeta> = {};
   for (const category of Object.values(progress.categories)) {
     for (const [name, s] of Object.entries(category.scenarios)) {
-      out[name] = { score: s.score, leaderboardId: s.leaderboard_id, rank: s.scenario_rank ?? 0 };
+      out[name] = { score: s.score, leaderboardId: s.leaderboard_id, rank: s.leaderboard_rank ?? 0 };
     }
   }
   return out;

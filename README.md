@@ -239,6 +239,16 @@ not a true multi-attempt session log** like the real feed would give.
 Worth keeping that distinction visible rather than presenting it as
 equivalent.
 
+**Field-name bug found via live testing:** the response has two different
+"rank" fields per scenario - `leaderboard_rank` (real global position,
+e.g. 27375) and `scenario_rank` (small tier number within the benchmark,
+e.g. 4). `getScenarioMeta` grabbed `scenario_rank` for the page-math
+calculation instead of `leaderboard_rank` - meaning every lookup computed
+page ~0 (searching among the world's top players) instead of the client's
+actual page. Not a "windowing wasn't wide enough" problem - it was
+searching a completely wrong location every time. Fixed to use
+`leaderboard_rank`.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted
