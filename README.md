@@ -211,6 +211,34 @@ Once this is confirmed working against real data, the next step is
 folding real per-session timestamps into the trend sparklines instead of
 relying only on manual-sync-interval snapshots.
 
+## Fallback: reconstructing activity from public leaderboard data (no username needed)
+
+For clients without a kovaaks.com username, `activity/recent` is a dead
+end - but the *scenario leaderboards themselves* are fully public and
+steamId-based, no username gate at all. `lib/kovaaks.ts`'s
+`findLeaderboardEntry()` searches a scenario's public leaderboard
+(`/leaderboard/scores/global`) for a specific player's entry, which
+carries a real `epoch` timestamp per entry.
+
+**Confirmed via live testing that a single computed page isn't reliable**:
+looked up StkTheLord using his `leaderboard_rank` (27375) from an earlier
+sync, computed page 273, and he wasn't on it - leaderboards reorder
+constantly as other players improve, so a rank even minutes old can drift
+off its expected page. Fixed by searching outward from the expected page
+(0, +1, -1, +2, -2...) instead of trusting one exact page, and by always
+using a *fresh* rank (re-fetched at request time) rather than a cached
+one.
+
+`/api/kovaaks/scenario-history` reconstructs an activity-like feed this
+way, capped at 12 scenarios per request (bounds the number of leaderboard
+lookups - each scenario needs up to 5 page fetches in the worst case).
+`RecentActivity` tries the real feed first, falls back to this
+automatically, and labels it clearly in the UI when it's the
+reconstruction - **this is "when each scenario's current best was set,"
+not a true multi-attempt session log** like the real feed would give.
+Worth keeping that distinction visible rather than presenting it as
+equivalent.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

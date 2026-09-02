@@ -14,16 +14,32 @@ function timeAgo(iso: string): string {
 
 export default function RecentActivity({ clientId }: { clientId: string }) {
   const [entries, setEntries] = useState<RecentActivityEntry[] | null>(null);
+  const [reconstructed, setReconstructed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     fetch(`/api/kovaaks/activity?clientId=${clientId}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
         setEntries(data.activity);
+        setReconstructed(false);
+      })
+      .catch(() => {
+        // No webapp username (or any other failure) - fall back to
+        // reconstructing from public leaderboard data instead. Works for
+        // any client, no username required, but is "last best set per
+        // scenario" not a true session-by-session feed - labeled as such.
+        return fetch(`/api/kovaaks/scenario-history?clientId=${clientId}`)
+          .then(async (res) => {
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
+            setEntries(data.activity);
+            setReconstructed(true);
+          });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -35,15 +51,23 @@ export default function RecentActivity({ clientId }: { clientId: string }) {
     return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>No recent activity found.</div>;
 
   return (
-    <div className="notes-list">
-      {entries.slice(0, 15).map((e, i) => (
-        <div className="note-item" key={i}>
-          <div className="date">{timeAgo(e.timestamp)}</div>
-          <div className="text">
-            {e.scenarioName} — <span style={{ fontFamily: "var(--font-mono)" }}>{Math.round(e.score)}</span>
-          </div>
+    <div>
+      {reconstructed && (
+        <div style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 8 }}>
+          Reconstructed from public leaderboard data (this client has no kovaaks.com username) -
+          shows when each scenario's current best was set, not every session played.
         </div>
-      ))}
+      )}
+      <div className="notes-list">
+        {entries.slice(0, 15).map((e, i) => (
+          <div className="note-item" key={i}>
+            <div className="date">{timeAgo(e.timestamp)}</div>
+            <div className="text">
+              {e.scenarioName} — <span style={{ fontFamily: "var(--font-mono)" }}>{Math.round(e.score)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

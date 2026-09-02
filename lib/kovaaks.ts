@@ -25,6 +25,7 @@ export interface BenchmarkProgressScenario {
   leaderboard_rank: number;
   scenario_rank: number;
   rank_maxes: number[];
+  leaderboard_id: number;
 }
 export interface BenchmarkProgressCategory {
   benchmark_progress: number;
@@ -113,4 +114,70 @@ export async function searchScenarioLeaderboardId(
     (s) => s.scenarioName.toLowerCase() === scenarioName.toLowerCase()
   );
   return exact?.leaderboardId ?? data.data?.[0]?.leaderboardId ?? null;
+}
+
+export interface ScenarioMeta {
+  score: number;
+  leaderboardId: number;
+  rank: number;
+}
+
+/** Same as flattenScenarioScores but keeps leaderboardId/rank - needed to look up a specific entry later. */
+export function getScenarioMeta(progress: BenchmarkProgressResponse): Record<string, ScenarioMeta> {
+  const out: Record<string, ScenarioMeta> = {};
+  for (const category of Object.values(progress.categories)) {
+    for (const [name, s] of Object.entries(category.scenarios)) {
+      out[name] = { score: s.score, leaderboardId: s.leaderboard_id, rank: s.scenario_rank ?? 0 };
+    }
+  }
+  return out;
+}
+
+export interface LeaderboardEntry {
+  steamId: string;
+  score: number;
+  rank: number;
+  attributes?: { epoch?: number; challengeStart?: string; [key: string]: unknown };
+}
+
+async function fetchLeaderboardPage(
+  leaderboardId: number,
+  page: number,
+  max: number
+): Promise<LeaderboardEntry[]> {
+  const url = `${BASE}/leaderboard/scores/global?leaderboardId=${leaderboardId}&page=${page}&max=${max}`;
+  const res = await fetch(url, { next: { revalidate: 0 } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data?.data ?? [];
+}
+
+/**
+ * Finds a specific player's entry on a scenario's public leaderboard by
+ * steamId - works for ANY player, no webapp username needed at all, unlike
+ * the activity/recent endpoint. The catch: leaderboards are live and
+ * constantly reordering, so a rank captured even minutes earlier can drift
+ * off the page it "should" be on. Confirmed via live testing - a rank of
+ * 27375 was NOT on the computed page 273 by the time it was checked.
+ * Searches outward from the expected page (0, +1, -1, +2, -2, ...) instead
+ * of trusting a single exact page.
+ */
+export async function findLeaderboardEntry(
+  leaderboardId: number,
+  steamId: string,
+  expectedRank: number,
+  max = 100,
+  maxPagesToCheck = 5
+): Promise<LeaderboardEntry | null> {
+  const expectedPage = Math.max(0, Math.floor((expectedRank - 1) / max));
+  const offsets = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5].slice(0, maxPagesToCheck);
+
+  for (const offset of offsets) {
+    const page = expectedPage + offset;
+    if (page < 0) continue;
+    const entries = await fetchLeaderboardPage(leaderboardId, page, max);
+    const match = entries.find((e) => e.steamId === steamId);
+    if (match) return match;
+  }
+  return null;
 }
