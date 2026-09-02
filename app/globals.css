@@ -231,8 +231,8 @@ a { color: inherit; text-decoration: none; }
 .subcat-cell .label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; }
 .subcat-cell .tier { font-family: var(--font-mono); font-weight: 700; margin-top: 2px; }
 
-.hero-row { display: flex; gap: 10px; margin-bottom: 16px; }
-.hero-stat { flex: 1; background: var(--panel-alt); border-radius: 12px; padding: 12px; }
+.hero-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.hero-stat { flex: 1; min-width: 90px; background: var(--panel-alt); border-radius: 12px; padding: 12px; }
 .hero-label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
 .hero-value { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin-top: 4px; }
 

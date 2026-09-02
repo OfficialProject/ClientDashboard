@@ -2,6 +2,16 @@
 import { useMemo } from "react";
 import type { UnifiedBenchmarkProgress } from "@/lib/types";
 
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return <span style={{ color: "var(--text-dim)", fontSize: 11 }}>—</span>;
   const min = Math.min(...values);
@@ -29,7 +39,13 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
-export default function SkillSummary({ history }: { history: UnifiedBenchmarkProgress[] }) {
+export default function SkillSummary({
+  history,
+  lastRealActivity,
+}: {
+  history: UnifiedBenchmarkProgress[];
+  lastRealActivity: string | null;
+}) {
   const latest = history.at(-1);
   const previous = history.length > 1 ? history[history.length - 2] : undefined;
 
@@ -70,6 +86,12 @@ export default function SkillSummary({ history }: { history: UnifiedBenchmarkPro
         <div className="hero-stat">
           <div className="hero-label">Weakest link</div>
           <div className="hero-value" style={{ fontSize: 14 }}>{weakest.label}</div>
+        </div>
+        <div className="hero-stat">
+          <div className="hero-label">Last played</div>
+          <div className="hero-value" style={{ fontSize: 14 }}>
+            {lastRealActivity ? timeAgo(lastRealActivity) : "unknown"}
+          </div>
         </div>
       </div>
 

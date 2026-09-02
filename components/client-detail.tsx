@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Client } from "@/lib/types";
 import type { BenchmarkDef } from "@/lib/benchmarks";
+import type { RecentActivityEntry } from "@/lib/kovaaks";
 import SkillBreakdown from "@/components/skill-breakdown";
 import SkillSummary from "@/components/skill-summary";
 import RecentActivity from "@/components/recent-activity";
@@ -23,6 +24,34 @@ export default function ClientDetail({ client }: { client: Client }) {
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [showFullBreakdown, setShowFullBreakdown] = useState(false);
+
+  const [activityEntries, setActivityEntries] = useState<RecentActivityEntry[] | null>(null);
+  const [activityReconstructed, setActivityReconstructed] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState("");
+
+  useEffect(() => {
+    setActivityLoading(true);
+    setActivityError("");
+    fetch(`/api/kovaaks/activity?clientId=${client.id}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
+        setActivityEntries(data.activity);
+        setActivityReconstructed(false);
+      })
+      .catch(() =>
+        fetch(`/api/kovaaks/scenario-history?clientId=${client.id}`).then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
+          setActivityEntries(data.activity);
+          setActivityReconstructed(true);
+        })
+      )
+      .catch((err) => setActivityError(err.message))
+      .finally(() => setActivityLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
 
   useEffect(() => {
     fetch("/api/benchmarks")
@@ -208,7 +237,7 @@ export default function ClientDetail({ client }: { client: Client }) {
                     {history.length > 1 ? ` · ${history.length} syncs on record` : ""}
                   </span>
                 </div>
-                <SkillSummary history={history} />
+                <SkillSummary history={history} lastRealActivity={activityEntries?.[0]?.timestamp ?? null} />
                 <button
                   className="sort-toggle"
                   style={{ marginTop: 14, marginBottom: showFullBreakdown ? 10 : 0 }}
@@ -240,7 +269,12 @@ export default function ClientDetail({ client }: { client: Client }) {
 
       <div className="panel">
         <h2>Recent Activity</h2>
-        <RecentActivity clientId={client.id} />
+        <RecentActivity
+          loading={activityLoading}
+          error={activityError}
+          entries={activityEntries}
+          reconstructed={activityReconstructed}
+        />
       </div>
 
       <div className="panel">

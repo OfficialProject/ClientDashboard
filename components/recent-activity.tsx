@@ -1,5 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
 import type { RecentActivityEntry } from "@/lib/kovaaks";
 
 function timeAgo(iso: string): string {
@@ -12,39 +11,17 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-export default function RecentActivity({ clientId }: { clientId: string }) {
-  const [entries, setEntries] = useState<RecentActivityEntry[] | null>(null);
-  const [reconstructed, setReconstructed] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    setError("");
-    fetch(`/api/kovaaks/activity?clientId=${clientId}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
-        setEntries(data.activity);
-        setReconstructed(false);
-      })
-      .catch(() => {
-        // No webapp username (or any other failure) - fall back to
-        // reconstructing from public leaderboard data instead. Works for
-        // any client, no username required, but is "last best set per
-        // scenario" not a true session-by-session feed - labeled as such.
-        return fetch(`/api/kovaaks/scenario-history?clientId=${clientId}`)
-          .then(async (res) => {
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Failed to load activity");
-            setEntries(data.activity);
-            setReconstructed(true);
-          });
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [clientId]);
-
+export default function RecentActivity({
+  loading,
+  error,
+  entries,
+  reconstructed,
+}: {
+  loading: boolean;
+  error: string;
+  entries: RecentActivityEntry[] | null;
+  reconstructed: boolean;
+}) {
   if (loading) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>Loading activity...</div>;
   if (error) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>{error}</div>;
   if (!entries || entries.length === 0)

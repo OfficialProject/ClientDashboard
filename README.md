@@ -249,6 +249,29 @@ actual page. Not a "windowing wasn't wide enough" problem - it was
 searching a completely wrong location every time. Fixed to use
 `leaderboard_rank`.
 
+## Real timestamps feeding the summary view
+
+Activity data now flows into the hero row, not just its own panel.
+Restructured the fetch to happen once at the page level
+(`components/client-detail.tsx`) - tries the real feed, falls back to the
+public-leaderboard reconstruction, same chain as before - and passes the
+result down to both `RecentActivity` (display) and `SkillSummary` (which
+now shows a real "Last played" stat, computed from the most recent
+activity entry). `RecentActivity` itself became a plain display component
+fed by props instead of fetching on its own, so the same data isn't
+requested twice.
+
+Worth being clear about what this is and isn't: "Last played" reflects
+actual play data (real or reconstructed from public leaderboards), which
+is meaningfully different from the "synced X ago" line already shown -
+that one only reflects when *we* last checked KovaaK's, not when the
+client actually played. Both are shown, since they answer different
+questions. This does NOT yet mean every sparkline data point is
+individually timestamped by real play data - the strengths/weaknesses
+trend lines still plot by sync order, not by real per-category play
+dates. That would need scenario-to-category mapping wired into the client
+bundle, a larger change not done here.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted
