@@ -40,8 +40,15 @@ export function LineChart({
   const ys = allPoints.map((p) => p.y);
   const xMin = Math.min(...xs);
   const xMax = Math.max(...xs);
-  const yMin = Math.min(...ys, 0);
-  const yMax = Math.max(...ys) || 1;
+  const rawYMin = Math.min(...ys);
+  const rawYMax = Math.max(...ys);
+  // Pad around the actual data range instead of always anchoring to 0 - an
+  // all-positive series anchored at 0 gets squashed into a thin band at the
+  // top of the chart, which hides downward movement. Padding the real
+  // min/max instead uses the full chart height either direction.
+  const yPad = (rawYMax - rawYMin) * 0.15 || Math.max(rawYMax, 1) * 0.1;
+  const yMin = rawYMin - yPad;
+  const yMax = rawYMax + yPad;
   const xRange = xMax - xMin || 1;
   const yRange = yMax - yMin || 1;
 
@@ -125,9 +132,9 @@ export function LineChart({
   );
 }
 
-const RADAR_SIZE = 240;
+const RADAR_SIZE = 220;
 const RADAR_CENTER = RADAR_SIZE / 2;
-const RADAR_RADIUS = RADAR_SIZE / 2 - 36;
+const RADAR_RADIUS = RADAR_SIZE / 2 - 52;
 
 /** Radar/hexagon chart - one axis per category, normalized 0-1 against the max value present so the shape is always readable regardless of each formula's native scale. */
 export function RadarChart({ axes }: { axes: { label: string; value: number }[] }) {
@@ -151,7 +158,11 @@ export function RadarChart({ axes }: { axes: { label: string; value: number }[] 
   const rings = [0.25, 0.5, 0.75, 1];
 
   return (
-    <svg viewBox={`0 0 ${RADAR_SIZE} ${RADAR_SIZE}`} width="100%" style={{ maxWidth: 320, display: "block", margin: "0 auto" }}>
+    <svg
+      viewBox={`0 0 ${RADAR_SIZE} ${RADAR_SIZE}`}
+      width="100%"
+      style={{ maxWidth: 240, display: "block", margin: "0 auto", overflow: "visible" }}
+    >
       {rings.map((r, ri) => {
         const ringPoints = axes.map((_, i) => pointFor(i, r));
         const d = ringPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ") + " Z";
@@ -166,7 +177,7 @@ export function RadarChart({ axes }: { axes: { label: string; value: number }[] 
         <circle key={i} cx={p.x} cy={p.y} r={3} fill="var(--accent)" />
       ))}
       {axes.map((a, i) => {
-        const p = pointFor(i, 1.22);
+        const p = pointFor(i, 1.35);
         return (
           <text
             key={i}

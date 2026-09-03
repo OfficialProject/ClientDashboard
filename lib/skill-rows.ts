@@ -54,9 +54,10 @@ export function computeCategoryAverages(rows: SkillRow[]): { category: string; s
   }));
 }
 
-/** Best (lowest number) global leaderboard rank across every scenario in the latest snapshot, if any were found. */
-export function bestLeaderboardRank(latest: UnifiedBenchmarkProgress): number | null {
-  const ranks = Object.values(latest.scenarioLeaderboardRanks ?? {});
-  if (ranks.length === 0) return null;
-  return Math.min(...ranks);
+/** Best (lowest number) global leaderboard rank across every scenario in the latest snapshot, plus which scenario it's from. */
+export function bestLeaderboardRank(latest: UnifiedBenchmarkProgress): { rank: number; scenario: string } | null {
+  const entries = Object.entries(latest.scenarioLeaderboardRanks ?? {});
+  if (entries.length === 0) return null;
+  const [scenario, rank] = entries.reduce((best, cur) => (cur[1] < best[1] ? cur : best));
+  return { rank, scenario };
 }

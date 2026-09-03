@@ -98,7 +98,8 @@ export default function SkillSummary({
         {bestRank !== null && (
           <div className="hero-stat">
             <div className="hero-label">Best global rank</div>
-            <div className="hero-value" style={{ fontSize: 14 }}>#{bestRank.toLocaleString()}</div>
+            <div className="hero-value" style={{ fontSize: 14 }}>#{bestRank.rank.toLocaleString()}</div>
+            <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>{bestRank.scenario}</div>
           </div>
         )}
       </div>
