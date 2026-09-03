@@ -272,6 +272,41 @@ trend lines still plot by sync order, not by real per-category play
 dates. That would need scenario-to-category mapping wired into the client
 bundle, a larger change not done here.
 
+## Critical fix: concurrent writes could corrupt the client data file
+
+**Confirmed in real use, not hypothetical:** `data/clients.json` corrupted
+in production usage - a genuine "Unexpected non-whitespace character"
+JSON parse error crashing every page. Root cause: `lib/store.ts` did
+read-the-whole-file -> modify -> write-the-whole-file for every mutation,
+with zero locking. Once the roster's bulk sync-all (v1.5) started firing
+many concurrent syncs per page load, plus the 5-minute auto-poll, plus
+auto-sync-on-assign, it became realistic for two requests to write to the
+same file at the same time - and concurrent `fs.writeFile` calls to one
+path can interleave mid-write, corrupting it. This is exactly what
+happened.
+
+Fixed two ways:
+1. **Every operation that touches the file now runs through one
+   serialized queue** (`withLock`) - no two reads/writes can ever overlap,
+   full stop.
+2. **Writes are now atomic** - write to a temp file, then `rename()` into
+   place (atomic on POSIX filesystems), instead of writing the real file
+   directly. Even a mid-write crash can't leave a half-written file
+   behind anymore.
+
+All mutation functions (`createClient`, `appendBenchmarkSnapshot`,
+`updateClient`, `addNote`, `deleteClient`) now go through a single
+`withClients()` helper that does the read-modify-write as one atomic
+locked unit, rather than separate locked read + locked write calls (which
+would still race between the two).
+
+**This does not repair an already-corrupted file** - `data/clients.json`
+is gitignored on purpose (it holds real client data), so this fix can't
+reach into an existing broken file on a running deployment. Recovery
+there is manual: back up the broken file, reset to `[]`, re-add clients
+(benchmark scores resync automatically from KovaaK's; hand-typed coaching
+notes are the one thing that doesn't come back automatically).
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

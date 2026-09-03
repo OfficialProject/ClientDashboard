@@ -9,11 +9,32 @@ import type { Client, Note, UnifiedBenchmarkProgress } from "./types";
  * this module for a real Postgres/Supabase-backed implementation before
  * deploying anywhere serverless - the rest of the app only depends on the
  * function signatures below, not on how they're implemented.
+ *
+ * CONFIRMED LIVE BUG, FIXED HERE: every read-modify-write here used to run
+ * with no locking at all. Once the roster's bulk sync-all (v1.5) started
+ * firing many concurrent syncs, plus the 5-minute auto-poll, plus
+ * auto-sync-on-assign, it became realistic for two requests to read and
+ * write clients.json at the same time - and concurrent fs.writeFile calls
+ * to the same path can interleave, corrupting the file (confirmed: a real
+ * "Unexpected non-whitespace character" JSON parse error in production
+ * use, not a hypothetical). Fixed two ways: (1) every operation that
+ * touches the file now runs through a single serialized queue, so no two
+ * can overlap; (2) writes go to a temp file and get renamed into place
+ * (atomic on POSIX filesystems), so even a crash mid-write can't leave a
+ * half-written file behind.
  */
 
 const DATA_FILE = path.join(process.cwd(), "data", "clients.json");
 
-async function readAll(): Promise<Client[]> {
+// Serializes all file access through one queue - this is the actual fix.
+let queue: Promise<unknown> = Promise.resolve();
+function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  const result = queue.then(fn, fn); // run after prior op regardless of its outcome
+  queue = result.catch(() => {}); // don't let one failure poison the whole queue
+  return result;
+}
+
+async function readAllUnlocked(): Promise<Client[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
     return JSON.parse(raw);
@@ -23,9 +44,25 @@ async function readAll(): Promise<Client[]> {
   }
 }
 
-async function writeAll(clients: Client[]): Promise<void> {
+async function writeAllUnlocked(clients: Client[]): Promise<void> {
   await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(clients, null, 2), "utf-8");
+  const tmpFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmpFile, JSON.stringify(clients, null, 2), "utf-8");
+  await fs.rename(tmpFile, DATA_FILE); // atomic on POSIX - no half-written file possible
+}
+
+async function readAll(): Promise<Client[]> {
+  return withLock(readAllUnlocked);
+}
+
+/** Read-modify-write as one atomic unit - use this instead of separate readAll+writeAll for any mutation. */
+async function withClients<T>(fn: (clients: Client[]) => T | Promise<T>): Promise<T> {
+  return withLock(async () => {
+    const clients = await readAllUnlocked();
+    const result = await fn(clients);
+    await writeAllUnlocked(clients);
+    return result;
+  });
 }
 
 export async function listClients(): Promise<Client[]> {
@@ -43,25 +80,25 @@ export async function createClient(input: {
   steamName: string;
   avatar: string;
 }): Promise<Client> {
-  const clients = await readAll();
-  const client: Client = {
-    id: crypto.randomUUID(),
-    nickname: input.nickname || input.steamName,
-    steamId: input.steamId,
-    steamName: input.steamName,
-    avatar: input.avatar,
-    premierRating: null,
-    faceitLevel: null,
-    faceitElo: null,
-    kovaaksUsername: null,
-    assignedBenchmarkId: null,
-    benchmarkHistory: {},
-    notes: [],
-    createdAt: new Date().toISOString(),
-  };
-  clients.push(client);
-  await writeAll(clients);
-  return client;
+  return withClients((clients) => {
+    const client: Client = {
+      id: crypto.randomUUID(),
+      nickname: input.nickname || input.steamName,
+      steamId: input.steamId,
+      steamName: input.steamName,
+      avatar: input.avatar,
+      premierRating: null,
+      faceitLevel: null,
+      faceitElo: null,
+      kovaaksUsername: null,
+      assignedBenchmarkId: null,
+      benchmarkHistory: {},
+      notes: [],
+      createdAt: new Date().toISOString(),
+    };
+    clients.push(client);
+    return client;
+  });
 }
 
 /** Appends a dated snapshot rather than overwriting - this is what makes trends possible. */
@@ -70,41 +107,44 @@ export async function appendBenchmarkSnapshot(
   benchmarkId: string,
   progress: UnifiedBenchmarkProgress
 ): Promise<Client | null> {
-  const clients = await readAll();
-  const idx = clients.findIndex((c) => c.id === id);
-  if (idx === -1) return null;
-  const existing = clients[idx].benchmarkHistory[benchmarkId] ?? [];
-  clients[idx].benchmarkHistory = {
-    ...clients[idx].benchmarkHistory,
-    [benchmarkId]: [...existing, progress],
-  };
-  await writeAll(clients);
-  return clients[idx];
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const existing = clients[idx].benchmarkHistory[benchmarkId] ?? [];
+    clients[idx].benchmarkHistory = {
+      ...clients[idx].benchmarkHistory,
+      [benchmarkId]: [...existing, progress],
+    };
+    return clients[idx];
+  });
 }
 
 export async function updateClient(
   id: string,
   patch: Partial<Client>
 ): Promise<Client | null> {
-  const clients = await readAll();
-  const idx = clients.findIndex((c) => c.id === id);
-  if (idx === -1) return null;
-  clients[idx] = { ...clients[idx], ...patch };
-  await writeAll(clients);
-  return clients[idx];
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    clients[idx] = { ...clients[idx], ...patch };
+    return clients[idx];
+  });
 }
 
 export async function addNote(id: string, text: string): Promise<Client | null> {
-  const clients = await readAll();
-  const idx = clients.findIndex((c) => c.id === id);
-  if (idx === -1) return null;
-  const note: Note = { id: crypto.randomUUID(), date: new Date().toISOString(), text };
-  clients[idx].notes = [note, ...clients[idx].notes];
-  await writeAll(clients);
-  return clients[idx];
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const note: Note = { id: crypto.randomUUID(), date: new Date().toISOString(), text };
+    clients[idx].notes = [note, ...clients[idx].notes];
+    return clients[idx];
+  });
 }
 
 export async function deleteClient(id: string): Promise<void> {
-  const clients = await readAll();
-  await writeAll(clients.filter((c) => c.id !== id));
+  return withClients((clients) => {
+    const remaining = clients.filter((c) => c.id !== id);
+    clients.length = 0;
+    clients.push(...remaining);
+  });
 }
