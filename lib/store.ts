@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import type { Client, Note, UnifiedBenchmarkProgress } from "./types";
+import type { Client, Note, Goal, Routine, UnifiedBenchmarkProgress } from "./types";
 
 /**
  * v1 storage: a JSON file on disk. This works fine for local dev and for
@@ -37,7 +37,9 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
 async function readAllUnlocked(): Promise<Client[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+    const clients = JSON.parse(raw) as Client[];
+    // Back-compat: clients saved before goals/routines existed won't have these fields.
+    return clients.map((c) => ({ ...c, goals: c.goals ?? [], routines: c.routines ?? [] }));
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -94,6 +96,8 @@ export async function createClient(input: {
       assignedBenchmarkId: null,
       benchmarkHistory: {},
       notes: [],
+      goals: [],
+      routines: [],
       createdAt: new Date().toISOString(),
     };
     clients.push(client);
@@ -137,6 +141,50 @@ export async function addNote(id: string, text: string): Promise<Client | null> 
     if (idx === -1) return null;
     const note: Note = { id: crypto.randomUUID(), date: new Date().toISOString(), text };
     clients[idx].notes = [note, ...clients[idx].notes];
+    return clients[idx];
+  });
+}
+
+export async function addGoal(
+  id: string,
+  input: { benchmarkId: string; category: string; subcategory: string; targetScore: number }
+): Promise<Client | null> {
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const goal: Goal = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...input };
+    clients[idx].goals = [...clients[idx].goals, goal];
+    return clients[idx];
+  });
+}
+
+export async function deleteGoal(id: string, goalId: string): Promise<Client | null> {
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    clients[idx].goals = clients[idx].goals.filter((g) => g.id !== goalId);
+    return clients[idx];
+  });
+}
+
+export async function addRoutine(
+  id: string,
+  input: { name: string; benchmarkId: string; scenarios: string[]; source: Routine["source"] }
+): Promise<Client | null> {
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const routine: Routine = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...input };
+    clients[idx].routines = [routine, ...clients[idx].routines];
+    return clients[idx];
+  });
+}
+
+export async function deleteRoutine(id: string, routineId: string): Promise<Client | null> {
+  return withClients((clients) => {
+    const idx = clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    clients[idx].routines = clients[idx].routines.filter((r) => r.id !== routineId);
     return clients[idx];
   });
 }

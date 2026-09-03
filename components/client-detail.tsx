@@ -14,6 +14,9 @@ import RankTrendChart from "@/components/rank-trend-chart";
 import ScenarioBrowser from "@/components/scenario-browser";
 import RosterTrendChart from "@/components/roster-trend-chart";
 import SessionStatChart from "@/components/session-stat-chart";
+import GoalsPanel from "@/components/goals-panel";
+import RoutinesPanel from "@/components/routines-panel";
+import PersonalBestBanner from "@/components/personal-best-banner";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -291,6 +294,7 @@ export default function ClientDetail({ client }: { client: Client }) {
                   </span>
                 </div>
                 <InsightSummary history={history} />
+                <PersonalBestBanner history={history} />
                 <SkillSummary history={history} lastRealActivity={activityEntries?.[0]?.timestamp ?? null} />
                 <button
                   className="sort-toggle"
@@ -323,6 +327,21 @@ export default function ClientDetail({ client }: { client: Client }) {
 
       {assignedBenchmarkId && progress && history && (
         <>
+          <div className="panel">
+            <h2>Goals</h2>
+            <GoalsPanel client={client} progress={progress} benchmarkId={assignedBenchmarkId} />
+          </div>
+
+          <div className="panel">
+            <h2>Routines</h2>
+            <RoutinesPanel
+              client={client}
+              progress={progress}
+              benchmarkId={assignedBenchmarkId}
+              activityEntries={activityEntries}
+            />
+          </div>
+
           <div className="panel">
             <h2>Skill Radar</h2>
             <SkillRadar history={history} />

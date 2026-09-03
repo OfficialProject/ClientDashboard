@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import type { RecentActivityEntry } from "@/lib/kovaaks";
 import { groupIntoSessions, computeConsistency } from "@/lib/sessions";
+import { computeStreak } from "@/lib/streaks";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -36,6 +37,7 @@ export default function RecentActivity({
 }) {
   const sessions = useMemo(() => (entries ? groupIntoSessions(entries) : []), [entries]);
   const consistency = useMemo(() => computeConsistency(sessions), [sessions]);
+  const streak = useMemo(() => computeStreak(sessions), [sessions]);
 
   if (loading) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>Loading activity...</div>;
   if (error) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>{error}</div>;
@@ -69,6 +71,14 @@ export default function RecentActivity({
         <div className="hero-stat">
           <div className="hero-label">Sessions (30d)</div>
           <div className="hero-value">{consistency.sessionsLast30Days}</div>
+        </div>
+        <div className="hero-stat">
+          <div className="hero-label">Current streak</div>
+          <div className="hero-value">{streak.currentStreak}d</div>
+        </div>
+        <div className="hero-stat">
+          <div className="hero-label">Longest streak</div>
+          <div className="hero-value">{streak.longestStreak}d</div>
         </div>
       </div>
 

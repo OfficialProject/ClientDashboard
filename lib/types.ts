@@ -52,6 +52,24 @@ export interface Note {
   text: string;
 }
 
+export interface Goal {
+  id: string;
+  benchmarkId: string;
+  category: string;
+  subcategory: string;
+  targetScore: number;
+  createdAt: string;
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  benchmarkId: string;
+  scenarios: string[];
+  source: "manual" | "auto-progression";
+  createdAt: string;
+}
+
 export interface Client {
   id: string;
   nickname: string; // the name Luke knows them by
@@ -65,5 +83,7 @@ export interface Client {
   assignedBenchmarkId: string | null; // registry id of the benchmark they're currently working on
   benchmarkHistory: Record<string, UnifiedBenchmarkProgress[]>; // keyed by registry id, oldest -> newest; latest = [].at(-1)
   notes: Note[];
+  goals: Goal[];
+  routines: Routine[];
   createdAt: string;
 }
