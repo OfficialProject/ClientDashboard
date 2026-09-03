@@ -81,12 +81,29 @@ export async function searchAccountNames(query: string): Promise<AccountNameMatc
   return Array.isArray(data) ? data : data?.data ?? [];
 }
 
+export interface PlayAttributes {
+  epoch?: number;
+  challengeStart?: string;
+  kills?: number;
+  accuracyDamage?: number; // damage-based accuracy metric, not a 0-100% figure - label accordingly in UI
+  avgFps?: number;
+  avgTtk?: number;
+  cm360?: number;
+  sensScale?: string;
+  horizSens?: number;
+  vertSens?: number;
+  resolution?: string;
+  fov?: number;
+  [key: string]: unknown;
+}
+
 export interface RecentActivityEntry {
   timestamp: string;
   type: string;
   scenarioName: string;
   score: number;
   leaderboardId: number;
+  attributes?: PlayAttributes;
 }
 
 /** Real per-play activity log, newest first - requires a resolved webapp username, not a steamId. */
@@ -137,7 +154,7 @@ export interface LeaderboardEntry {
   steamId: string;
   score: number;
   rank: number;
-  attributes?: { epoch?: number; challengeStart?: string; [key: string]: unknown };
+  attributes?: PlayAttributes;
 }
 
 async function fetchLeaderboardPage(

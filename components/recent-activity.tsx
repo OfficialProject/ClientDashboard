@@ -1,5 +1,7 @@
 "use client";
+import { useMemo } from "react";
 import type { RecentActivityEntry } from "@/lib/kovaaks";
+import { groupIntoSessions, computeConsistency } from "@/lib/sessions";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -9,6 +11,16 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function formatAttrs(e: RecentActivityEntry): string {
+  const a = e.attributes;
+  if (!a) return "";
+  const parts: string[] = [];
+  if (a.accuracyDamage !== undefined) parts.push(`${Math.round(a.accuracyDamage)} dmg`);
+  if (a.kills !== undefined) parts.push(`${a.kills} kills`);
+  if (a.avgTtk) parts.push(`${a.avgTtk.toFixed(2)}s TTK`);
+  return parts.join(" · ");
 }
 
 export default function RecentActivity({
@@ -22,6 +34,9 @@ export default function RecentActivity({
   entries: RecentActivityEntry[] | null;
   reconstructed: boolean;
 }) {
+  const sessions = useMemo(() => (entries ? groupIntoSessions(entries) : []), [entries]);
+  const consistency = useMemo(() => computeConsistency(sessions), [sessions]);
+
   if (loading) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>Loading activity...</div>;
   if (error) return <div style={{ color: "var(--text-dim)", fontSize: 13 }}>{error}</div>;
   if (!entries || entries.length === 0)
@@ -35,16 +50,48 @@ export default function RecentActivity({
           shows when each scenario's current best was set, not every session played.
         </div>
       )}
-      <div className="notes-list">
-        {entries.slice(0, 15).map((e, i) => (
-          <div className="note-item" key={i}>
-            <div className="date">{timeAgo(e.timestamp)}</div>
-            <div className="text">
-              {e.scenarioName} — <span style={{ fontFamily: "var(--font-mono)" }}>{Math.round(e.score)}</span>
-            </div>
+
+      <div className="hero-row" style={{ marginBottom: 14 }}>
+        <div className="hero-stat">
+          <div className="hero-label">Last session</div>
+          <div className="hero-value" style={{ fontSize: 14 }}>
+            {consistency.daysSinceLastSession === null
+              ? "unknown"
+              : consistency.daysSinceLastSession === 0
+              ? "today"
+              : `${consistency.daysSinceLastSession}d ago`}
           </div>
-        ))}
+        </div>
+        <div className="hero-stat">
+          <div className="hero-label">Sessions (7d)</div>
+          <div className="hero-value">{consistency.sessionsLast7Days}</div>
+        </div>
+        <div className="hero-stat">
+          <div className="hero-label">Sessions (30d)</div>
+          <div className="hero-value">{consistency.sessionsLast30Days}</div>
+        </div>
       </div>
+
+      {sessions.slice(0, 8).map((s, i) => (
+        <div key={i} style={{ marginBottom: 14 }}>
+          <div style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {timeAgo(s.end)} · {s.entries.length} scenario{s.entries.length === 1 ? "" : "s"}
+          </div>
+          <div className="notes-list">
+            {s.entries.map((e, j) => (
+              <div className="note-item" key={j}>
+                <div className="date">{new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                <div className="text">
+                  {e.scenarioName} — <span style={{ fontFamily: "var(--font-mono)" }}>{Math.round(e.score)}</span>
+                  {formatAttrs(e) && (
+                    <span style={{ color: "var(--text-dim)", fontSize: 11 }}> · {formatAttrs(e)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

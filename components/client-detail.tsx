@@ -7,6 +7,7 @@ import type { RecentActivityEntry } from "@/lib/kovaaks";
 import SkillBreakdown from "@/components/skill-breakdown";
 import SkillSummary from "@/components/skill-summary";
 import RecentActivity from "@/components/recent-activity";
+import RosterComparison from "@/components/roster-comparison";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -14,6 +15,8 @@ export default function ClientDetail({ client }: { client: Client }) {
   const [faceitLevel, setFaceitLevel] = useState(client.faceitLevel ?? "");
   const [faceitElo, setFaceitElo] = useState(client.faceitElo ?? "");
   const [savingRanks, setSavingRanks] = useState(false);
+  const [faceitSyncing, setFaceitSyncing] = useState(false);
+  const [faceitError, setFaceitError] = useState("");
 
   const [benchmarks, setBenchmarks] = useState<BenchmarkDef[]>([]);
   const [assignedBenchmarkId, setAssignedBenchmarkId] = useState(client.assignedBenchmarkId ?? "");
@@ -29,6 +32,11 @@ export default function ClientDetail({ client }: { client: Client }) {
   const [activityReconstructed, setActivityReconstructed] = useState(false);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState("");
+
+  const [rosterAverages, setRosterAverages] = useState<
+    { subcategory: string; category: string; averageScore: number }[]
+  >([]);
+  const [rosterClientCount, setRosterClientCount] = useState(0);
 
   useEffect(() => {
     setActivityLoading(true);
@@ -59,6 +67,20 @@ export default function ClientDetail({ client }: { client: Client }) {
       .then((d) => setBenchmarks(d.benchmarks ?? []));
   }, []);
 
+  useEffect(() => {
+    if (!assignedBenchmarkId) {
+      setRosterAverages([]);
+      return;
+    }
+    fetch(`/api/clients/roster-stats?benchmarkId=${assignedBenchmarkId}&excludeClientId=${client.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setRosterAverages(d.averages ?? []);
+        setRosterClientCount(d.clientCount ?? 0);
+      })
+      .catch(() => setRosterAverages([]));
+  }, [assignedBenchmarkId, client.id]);
+
   // Live auto-refresh while this page is open - only while open, not a true
   // background job (that needs always-on hosting + a real database, not
   // done yet). Polls every 5 minutes, only when a benchmark is assigned.
@@ -83,6 +105,23 @@ export default function ClientDetail({ client }: { client: Client }) {
       }),
     });
     setSavingRanks(false);
+    router.refresh();
+  }
+
+  async function syncFaceit() {
+    setFaceitSyncing(true);
+    setFaceitError("");
+    const res = await fetch("/api/faceit/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId: client.id }),
+    });
+    setFaceitSyncing(false);
+    if (!res.ok) {
+      const data = await res.json();
+      setFaceitError(data.error ?? "FACEIT sync failed.");
+      return;
+    }
     router.refresh();
   }
 
@@ -187,14 +226,22 @@ export default function ClientDetail({ client }: { client: Client }) {
             />
           </label>
         </div>
-        <button
-          className="sync-button"
-          style={{ marginTop: 12 }}
-          onClick={saveRanks}
-          disabled={savingRanks}
-        >
-          {savingRanks ? "Saving..." : "Save ranks"}
-        </button>
+        <div className="rank-row" style={{ marginTop: 12, gap: 8 }}>
+          <button className="sync-button" onClick={saveRanks} disabled={savingRanks}>
+            {savingRanks ? "Saving..." : "Save ranks"}
+          </button>
+          <button className="sync-button" onClick={syncFaceit} disabled={faceitSyncing}>
+            {faceitSyncing ? "Syncing FACEIT..." : "Sync FACEIT"}
+          </button>
+        </div>
+        {faceitError && (
+          <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>{faceitError}</div>
+        )}
+        <div style={{ color: "var(--text-dim)", fontSize: 11, marginTop: 8 }}>
+          Premier rank has no auto-pull path - it requires a persistent Steam bot connected to
+          CS2's Game Coordinator (real infrastructure, not a simple API call), not built here.
+          Stays manual entry.
+        </div>
       </div>
 
       <div className="panel">
@@ -266,6 +313,13 @@ export default function ClientDetail({ client }: { client: Client }) {
           </>
         )}
       </div>
+
+      {assignedBenchmarkId && progress && (
+        <div className="panel">
+          <h2>Roster Comparison</h2>
+          <RosterComparison progress={progress} averages={rosterAverages} clientCount={rosterClientCount} />
+        </div>
+      )}
 
       <div className="panel">
         <h2>Recent Activity</h2>

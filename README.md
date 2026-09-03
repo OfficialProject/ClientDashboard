@@ -307,6 +307,44 @@ there is manual: back up the broken file, reset to `[]`, re-add clients
 (benchmark scores resync automatically from KovaaK's; hand-typed coaching
 notes are the one thing that doesn't come back automatically).
 
+## Four parallel features (v2.6)
+
+**1. Rich per-play stats surfaced, not discarded.** Every leaderboard/activity
+entry already carried accuracy damage, kills, avg TTK, sensitivity settings -
+we were only ever extracting `score`. Now typed properly (`PlayAttributes`
+in `lib/kovaaks.ts`) and shown per entry in Recent Activity. Note:
+`accuracyDamage` is a damage-based figure from KovaaK's, not a 0-100%
+accuracy percentage - labeled as "dmg," not "accuracy%," to avoid
+overclaiming what the number actually means.
+
+**2. Activity grouped into inferred sessions**, not a flat list
+(`lib/sessions.ts`). Entries within 45 minutes of each other are treated as
+one session. Important honesty note, same as the reconstructed-activity
+caveat: our data is "best score per scenario," one point each - so this is
+"scenarios whose best was set around the same time," inferred as a session,
+not a true exhaustive multi-attempt log.
+
+**3. Cross-client roster comparison** (`/api/clients/roster-stats`,
+`components/roster-comparison.tsx`) - a client's per-category score against
+the average of every other client assigned to the same benchmark. Free win:
+entirely built from data already stored, no new external calls.
+
+**4. Consistency stats** - days since last session, sessions in the last
+7/30 days - derived directly from the session grouping above.
+
+**5. FACEIT auto-pull, on solid ground this time.** `lib/faceit.ts` uses
+FACEIT's official, documented Data API v4 (needs a free `FACEIT_API_KEY`)
+- steamId-based, works for any client automatically, no username-resolution
+gate like KovaaK's had. Not yet live-tested from this environment (no key
+available here) - same as everything else sourced from an external API,
+treat the first real sync as a smoke test.
+
+**Premier auto-pull was explicitly NOT built.** It needs a persistent Steam
+bot logged into CS2's Game Coordinator - real infrastructure (exactly what
+[[ranklab]]'s bot pool exists for), not a REST call. Faking a partial
+version would be worse than being upfront that it's out of scope here.
+Stays manual entry.
+
 ## Add-client flow
 
 Single field, evxl-style: SteamID64, vanity name, or a pasted

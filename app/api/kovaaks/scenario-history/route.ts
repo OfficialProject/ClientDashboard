@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       scenarioName: r.scenarioName,
       score: r.score,
       timestamp: new Date(r.entry!.attributes!.epoch!).toISOString(),
+      attributes: r.entry!.attributes,
     }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
