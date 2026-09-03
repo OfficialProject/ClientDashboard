@@ -8,6 +8,12 @@ import SkillBreakdown from "@/components/skill-breakdown";
 import SkillSummary from "@/components/skill-summary";
 import RecentActivity from "@/components/recent-activity";
 import RosterComparison from "@/components/roster-comparison";
+import InsightSummary from "@/components/insight-summary";
+import SkillRadar from "@/components/skill-radar";
+import RankTrendChart from "@/components/rank-trend-chart";
+import ScenarioBrowser from "@/components/scenario-browser";
+import RosterTrendChart from "@/components/roster-trend-chart";
+import SessionStatChart from "@/components/session-stat-chart";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -284,6 +290,7 @@ export default function ClientDetail({ client }: { client: Client }) {
                     {history.length > 1 ? ` · ${history.length} syncs on record` : ""}
                   </span>
                 </div>
+                <InsightSummary history={history} />
                 <SkillSummary history={history} lastRealActivity={activityEntries?.[0]?.timestamp ?? null} />
                 <button
                   className="sort-toggle"
@@ -314,11 +321,34 @@ export default function ClientDetail({ client }: { client: Client }) {
         )}
       </div>
 
-      {assignedBenchmarkId && progress && (
-        <div className="panel">
-          <h2>Roster Comparison</h2>
-          <RosterComparison progress={progress} averages={rosterAverages} clientCount={rosterClientCount} />
-        </div>
+      {assignedBenchmarkId && progress && history && (
+        <>
+          <div className="panel">
+            <h2>Skill Radar</h2>
+            <SkillRadar history={history} />
+          </div>
+
+          <div className="panel">
+            <h2>Rank Trend</h2>
+            <RankTrendChart history={history} />
+          </div>
+
+          <div className="panel">
+            <h2>Scenario Browser</h2>
+            <ScenarioBrowser history={history} />
+          </div>
+
+          <div className="panel">
+            <h2>Roster Comparison</h2>
+            <RosterComparison progress={progress} averages={rosterAverages} clientCount={rosterClientCount} />
+            {rosterClientCount > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Trend vs. roster</div>
+                <RosterTrendChart benchmarkId={assignedBenchmarkId} currentClientId={client.id} />
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <div className="panel">
@@ -329,6 +359,12 @@ export default function ClientDetail({ client }: { client: Client }) {
           entries={activityEntries}
           reconstructed={activityReconstructed}
         />
+        {activityEntries && activityEntries.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Session stats</div>
+            <SessionStatChart entries={activityEntries} />
+          </div>
+        )}
       </div>
 
       <div className="panel">

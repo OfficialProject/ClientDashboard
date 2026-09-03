@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import type { UnifiedBenchmarkProgress } from "@/lib/types";
+import { bestLeaderboardRank } from "@/lib/skill-rows";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -75,6 +76,7 @@ export default function SkillSummary({
   const strengths = sorted.slice(0, 3);
   const weaknesses = sorted.slice(-3).reverse();
   const weakest = sorted[sorted.length - 1];
+  const bestRank = bestLeaderboardRank(latest);
 
   return (
     <div>
@@ -93,6 +95,12 @@ export default function SkillSummary({
             {lastRealActivity ? timeAgo(lastRealActivity) : "unknown"}
           </div>
         </div>
+        {bestRank !== null && (
+          <div className="hero-stat">
+            <div className="hero-label">Best global rank</div>
+            <div className="hero-value" style={{ fontSize: 14 }}>#{bestRank.toLocaleString()}</div>
+          </div>
+        )}
       </div>
 
       <div className="summary-cols">

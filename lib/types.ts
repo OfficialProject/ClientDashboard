@@ -41,6 +41,8 @@ export interface UnifiedBenchmarkProgress {
     score: number; // continuous, comparable across syncs - see lib/viscose.ts / lib/voltaic.ts for what it means per formula
   }[];
   scenarioScores: Record<string, number>;
+  /** Global public-leaderboard position per scenario, when KovaaK's returned one. Sparse - not every scenario has a rank (e.g. unplayed, or leaderboard not indexed). */
+  scenarioLeaderboardRanks: Record<string, number>;
   syncedAt: string;
 }
 

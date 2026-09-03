@@ -6,8 +6,18 @@ import { resolveToSteamId64 } from "./steam";
 import {
   getBenchmarkProgress,
   flattenScenarioScores,
+  getScenarioMeta,
   type BenchmarkProgressResponse,
 } from "./kovaaks";
+
+/** Global public-leaderboard rank per scenario, shared across all three formula paths below. */
+function scenarioLeaderboardRanksFrom(progress: BenchmarkProgressResponse): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [name, m] of Object.entries(getScenarioMeta(progress))) {
+    if (m.rank > 0) out[name] = m.rank;
+  }
+  return out;
+}
 
 /** Viscose path: use our own decoded tier-threshold formula for exact Lemming/Hare/... names. */
 function fromViscose(
@@ -34,6 +44,7 @@ function fromViscose(
       score: s.score,
     })),
     scenarioScores: flat,
+    scenarioLeaderboardRanks: scenarioLeaderboardRanksFrom(progress),
     syncedAt: now,
   };
 }
@@ -58,6 +69,7 @@ function fromVoltaic(
       score: g.energy,
     })),
     scenarioScores: flat,
+    scenarioLeaderboardRanks: scenarioLeaderboardRanksFrom(progress),
     syncedAt: now,
   };
 }
@@ -81,6 +93,7 @@ function fromNative(
       score: c.benchmark_progress, // continuous - matches Voltaic's energy granularity, unlike the coarse rank index
     })),
     scenarioScores: flattenScenarioScores(progress),
+    scenarioLeaderboardRanks: scenarioLeaderboardRanksFrom(progress),
     syncedAt: now,
   };
 }
