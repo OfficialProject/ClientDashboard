@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { RecentActivityEntry } from "@/lib/kovaaks";
 import { groupIntoSessions, computeConsistency } from "@/lib/sessions";
 import { computeStreak } from "@/lib/streaks";
+import LocalTime from "./local-time";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -90,7 +91,7 @@ export default function RecentActivity({
           <div className="notes-list">
             {s.entries.map((e, j) => (
               <div className="note-item" key={j}>
-                <div className="date">{new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                <div className="date"><LocalTime iso={e.timestamp} format="time" /></div>
                 <div className="text">
                   {e.scenarioName} — <span style={{ fontFamily: "var(--font-mono)" }}>{Math.round(e.score)}</span>
                   {formatAttrs(e) && (

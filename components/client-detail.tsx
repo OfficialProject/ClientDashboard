@@ -19,6 +19,7 @@ import RoutinesPanel from "@/components/routines-panel";
 import PersonalBestBanner from "@/components/personal-best-banner";
 import MatchStatsPanel from "@/components/match-stats-panel";
 import PremierDemoPanel from "@/components/premier-demo-panel";
+import LocalTime from "@/components/local-time";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -301,7 +302,7 @@ export default function ClientDetail({ client }: { client: Client }) {
                 <div className="rank-row" style={{ margin: "14px 0 12px" }}>
                   <span className="rank-chip viscose">{progress.overallRankName}</span>
                   <span style={{ color: "var(--text-dim)", fontSize: 12, alignSelf: "center" }}>
-                    synced {new Date(progress.syncedAt).toLocaleString()}
+                    synced <LocalTime iso={progress.syncedAt} />
                     {history.length > 1 ? ` · ${history.length} syncs on record` : ""}
                   </span>
                 </div>
@@ -406,7 +407,7 @@ export default function ClientDetail({ client }: { client: Client }) {
           )}
           {client.notes.map((n) => (
             <div className="note-item" key={n.id}>
-              <div className="date">{new Date(n.date).toLocaleString()}</div>
+              <div className="date"><LocalTime iso={n.date} /></div>
               <div className="text">{n.text}</div>
             </div>
           ))}

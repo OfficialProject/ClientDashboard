@@ -94,6 +94,65 @@ export async function getFaceitLifetimeStats(playerId: string): Promise<FaceitLi
   };
 }
 
+export interface MatchPlayerStats {
+  map: string | null;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  adr: number | null;
+  headshotPct: number | null;
+  mvps: number | null;
+  won: boolean | null;
+}
+
+/**
+ * Per-map stats for one player in one match. Field names inside
+ * `player_stats` (Kills, Deaths, ADR, Headshots %, etc.) are based on the
+ * stat categories consistently used across FACEIT's own tooling ecosystem
+ * (FaceitTracker, faceit-ruby, and others all expose the same set) - the
+ * exact key strings are read defensively with fallbacks rather than
+ * asserted with full certainty, same caution as the lifetime-stats parser
+ * above, since this specific nested shape hasn't been hit against a real
+ * response from this codebase yet.
+ */
+export async function getMatchPlayerStats(matchId: string, playerId: string): Promise<MatchPlayerStats | null> {
+  const key = process.env.FACEIT_API_KEY;
+  if (!key) throw new Error("FACEIT_API_KEY is not configured.");
+
+  const res = await fetch(`${BASE}/matches/${encodeURIComponent(matchId)}/stats`, {
+    headers: { Authorization: `Bearer ${key}` },
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const rounds = (data?.rounds as Array<Record<string, unknown>> | undefined) ?? [];
+
+  for (const round of rounds) {
+    const roundStats = round["round_stats"] as Record<string, unknown> | undefined;
+    const map = typeof roundStats?.["Map"] === "string" ? (roundStats["Map"] as string) : null;
+    const teams = (round["teams"] as Array<Record<string, unknown>> | undefined) ?? [];
+
+    for (const team of teams) {
+      const players = (team["players"] as Array<Record<string, unknown>> | undefined) ?? [];
+      const player = players.find((p) => p["player_id"] === playerId);
+      if (!player) continue;
+
+      const stats = (player["player_stats"] as Record<string, unknown> | undefined) ?? {};
+      return {
+        map,
+        kills: num(stats["Kills"]),
+        deaths: num(stats["Deaths"]),
+        assists: num(stats["Assists"]),
+        adr: num(stats["ADR"]),
+        headshotPct: num(stats["Headshots %"]),
+        mvps: num(stats["MVPs"]),
+        won: stats["Result"] !== undefined ? stats["Result"] === "1" || stats["Result"] === 1 : null,
+      };
+    }
+  }
+  return null; // player not found in this match's stats (shouldn't normally happen for a match in their own history)
+}
+
 export interface FaceitRecentMatch {
   matchId: string;
   finishedAt: string | null;
@@ -101,7 +160,21 @@ export interface FaceitRecentMatch {
   result: "win" | "loss" | "unknown";
 }
 
-/** Recent match list - win/loss + map only. Per-match KDA would need a second lookup per match (/matches/{id}/stats) and is left out here rather than firing N extra requests for a placeholder panel. */
+/** Looks up the map for one match via the stats endpoint - `rounds[0].round_stats.Map` is where FACEIT actually puts it, not anywhere on the lightweight history endpoint (verified against real usage, not guessed - the original version of this guessed a `voting.map.pick` field that doesn't exist on this endpoint at all, which is why every match showed "Unknown map"). */
+async function getMatchMap(matchId: string, key: string): Promise<string | null> {
+  const res = await fetch(`${BASE}/matches/${encodeURIComponent(matchId)}/stats`, {
+    headers: { Authorization: `Bearer ${key}` },
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const rounds = data?.rounds as Array<Record<string, unknown>> | undefined;
+  const roundStats = rounds?.[0]?.["round_stats"] as Record<string, unknown> | undefined;
+  const map = roundStats?.["Map"];
+  return typeof map === "string" ? map : null;
+}
+
+/** Recent match list - win/loss + map. Per-match KDA would need yet another lookup per match and is left out here rather than firing even more extra requests for a placeholder panel. */
 export async function getFaceitRecentMatches(playerId: string, limit = 10): Promise<FaceitRecentMatch[]> {
   const key = process.env.FACEIT_API_KEY;
   if (!key) throw new Error("FACEIT_API_KEY is not configured.");
@@ -117,28 +190,31 @@ export async function getFaceitRecentMatches(playerId: string, limit = 10): Prom
   const data = await res.json();
   const items: unknown[] = data?.items ?? [];
 
-  return items.map((raw): FaceitRecentMatch => {
-    const item = raw as Record<string, unknown>;
-    const results = item["results"] as Record<string, unknown> | undefined;
-    const winnerFaction = results?.["winner"] as string | undefined;
-    const teams = item["teams"] as Record<string, unknown> | undefined;
-    // Which faction this player's team was on isn't in the summary payload without matching player_id inside team rosters - left "unknown" when it can't be determined cheaply.
-    let result: FaceitRecentMatch["result"] = "unknown";
-    if (winnerFaction && teams) {
-      for (const [factionKey, teamVal] of Object.entries(teams)) {
-        const roster = (teamVal as Record<string, unknown>)?.["players"] as Array<Record<string, unknown>> | undefined;
-        if (roster?.some((p) => p["player_id"] === playerId)) {
-          result = factionKey === winnerFaction ? "win" : "loss";
+  const matches = await Promise.all(
+    items.map(async (raw): Promise<FaceitRecentMatch> => {
+      const item = raw as Record<string, unknown>;
+      const results = item["results"] as Record<string, unknown> | undefined;
+      const winnerFaction = results?.["winner"] as string | undefined;
+      const teams = item["teams"] as Record<string, unknown> | undefined;
+      let result: FaceitRecentMatch["result"] = "unknown";
+      if (winnerFaction && teams) {
+        for (const [factionKey, teamVal] of Object.entries(teams)) {
+          const roster = (teamVal as Record<string, unknown>)?.["players"] as Array<Record<string, unknown>> | undefined;
+          if (roster?.some((p) => p["player_id"] === playerId)) {
+            result = factionKey === winnerFaction ? "win" : "loss";
+          }
         }
       }
-    }
-    return {
-      matchId: String(item["match_id"] ?? ""),
-      finishedAt: item["finished_at"] ? new Date(Number(item["finished_at"]) * 1000).toISOString() : null,
-      map: (item["voting"] as Record<string, unknown>)?.["map"]
-        ? String(((item["voting"] as Record<string, unknown>)["map"] as Record<string, unknown>)["pick"])
-        : null,
-      result,
-    };
-  });
+      const matchId = String(item["match_id"] ?? "");
+      const map = matchId ? await getMatchMap(matchId, key).catch(() => null) : null;
+      return {
+        matchId,
+        finishedAt: item["finished_at"] ? new Date(Number(item["finished_at"]) * 1000).toISOString() : null,
+        map,
+        result,
+      };
+    })
+  );
+
+  return matches;
 }
