@@ -24,6 +24,8 @@ export interface PremierDemoJob {
   error: string | null;
   createdAt: string;
   resolvedAt: string | null;
+  /** Populated client-side after WASM parsing, via POST /api/premier/demo-jobs/parsed - server never parses the demo itself. */
+  parsedStats: unknown | null;
 }
 
 const DATA_FILE = path.join(process.cwd(), "data", "premier-demo-jobs.json");
@@ -38,7 +40,8 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
 async function readAllUnlocked(): Promise<PremierDemoJob[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+    const jobs = JSON.parse(raw) as PremierDemoJob[];
+    return jobs.map((j) => ({ ...j, parsedStats: j.parsedStats ?? null })); // back-compat with jobs saved before parsedStats existed
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -72,6 +75,7 @@ export async function enqueueJob(clientId: string, shareCode: string): Promise<P
       error: null,
       createdAt: new Date().toISOString(),
       resolvedAt: null,
+      parsedStats: null,
     };
     jobs.push(job);
     await writeAllUnlocked(jobs);
@@ -104,5 +108,16 @@ export async function failJob(id: string, error: string): Promise<void> {
     if (idx === -1) return;
     jobs[idx] = { ...jobs[idx], status: "error", error, resolvedAt: new Date().toISOString() };
     await writeAllUnlocked(jobs);
+  });
+}
+
+export async function saveParsedStats(id: string, parsedStats: unknown): Promise<PremierDemoJob | null> {
+  return withLock(async () => {
+    const jobs = await readAllUnlocked();
+    const idx = jobs.findIndex((j) => j.id === id);
+    if (idx === -1) return null;
+    jobs[idx] = { ...jobs[idx], parsedStats };
+    await writeAllUnlocked(jobs);
+    return jobs[idx];
   });
 }

@@ -10,3 +10,9 @@ declare module "globaloffensive-sharecode" {
     decode(): { matchId: string; outcomeId: string; token: string };
   }
 }
+
+declare module "seek-bzip" {
+  function decode(input: Uint8Array | Buffer, outputSize?: number): Buffer;
+  const _default: { decode: typeof decode };
+  export default _default;
+}
