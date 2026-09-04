@@ -1,3 +1,9 @@
+import { config as loadEnv } from "dotenv";
+// Standalone scripts don't get Next.js's automatic .env.local loading -
+// load it explicitly, matching Next.js's own file (not plain .env, which
+// isn't the file actually in use here).
+loadEnv({ path: ".env.local" });
+
 import { SteamGCBot } from "../lib/steam-gc-bot";
 import { nextPendingJob, resolveJob, failJob } from "../lib/premier-jobs-store";
 
