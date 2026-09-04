@@ -17,6 +17,8 @@ import SessionStatChart from "@/components/session-stat-chart";
 import GoalsPanel from "@/components/goals-panel";
 import RoutinesPanel from "@/components/routines-panel";
 import PersonalBestBanner from "@/components/personal-best-banner";
+import MatchStatsPanel from "@/components/match-stats-panel";
+import PremierDemoPanel from "@/components/premier-demo-panel";
 
 export default function ClientDetail({ client }: { client: Client }) {
   const router = useRouter();
@@ -251,6 +253,16 @@ export default function ClientDetail({ client }: { client: Client }) {
           CS2's Game Coordinator (real infrastructure, not a simple API call), not built here.
           Stays manual entry.
         </div>
+      </div>
+
+      <div className="panel">
+        <h2>Match Stats</h2>
+        <MatchStatsPanel clientId={client.id} />
+      </div>
+
+      <div className="panel">
+        <h2>Premier Demo Resolver</h2>
+        <PremierDemoPanel clientId={client.id} />
       </div>
 
       <div className="panel">

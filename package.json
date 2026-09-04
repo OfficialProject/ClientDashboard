@@ -6,17 +6,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "gc-bot": "tsx scripts/gc-bot-worker.ts"
   },
   "dependencies": {
+    "globaloffensive": "^3.3.0",
+    "globaloffensive-sharecode": "^1.1.1",
     "next": "^14.2.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "steam-totp": "^2.1.2",
+    "steam-user": "^5.3.0",
+    "steamid": "^2.1.0"
   },
   "devDependencies": {
+    "@types/globaloffensive": "^2.3.4",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@types/steam-user": "^5.1.1",
+    "@types/steamid": "^2.0.4",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.0"
   }
 }
