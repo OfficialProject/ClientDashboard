@@ -22,6 +22,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     "faceitLevel",
     "faceitElo",
     "assignedBenchmarkId",
+    "steamAuthCode",
+    "lastKnownShareCode",
   ] as const;
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {

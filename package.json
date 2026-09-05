@@ -8,9 +8,16 @@
     "start": "next start",
     "lint": "next lint",
     "gc-bot": "tsx scripts/gc-bot-worker.ts",
-    "setup-bot-2fa": "tsx scripts/setup-bot-2fa.ts"
+    "setup-bot-2fa": "tsx scripts/setup-bot-2fa.ts",
+    "sync-scheduler": "tsx scripts/sync-scheduler.ts",
+    "workers:start": "pm2 start ecosystem.config.js",
+    "workers:stop": "pm2 stop ecosystem.config.js",
+    "workers:restart": "pm2 restart ecosystem.config.js",
+    "workers:status": "pm2 status",
+    "workers:logs": "pm2 logs"
   },
   "dependencies": {
+    "@laihoe/demoparser2": "^0.42.0",
     "buffer": "^6.0.3",
     "dotenv": "^17.4.2",
     "globaloffensive": "^3.3.0",
@@ -33,6 +40,7 @@
     "@types/steam-user": "^5.1.1",
     "@types/steamcommunity": "^3.50.0",
     "@types/steamid": "^2.0.4",
+    "pm2": "^7.0.4",
     "tsx": "^4.23.13",
     "typescript": "^5.5.0"
   }

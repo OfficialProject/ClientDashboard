@@ -38,8 +38,15 @@ async function readAllUnlocked(): Promise<Client[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
     const clients = JSON.parse(raw) as Client[];
-    // Back-compat: clients saved before goals/routines existed won't have these fields.
-    return clients.map((c) => ({ ...c, goals: c.goals ?? [], routines: c.routines ?? [] }));
+    // Back-compat: clients saved before these fields existed won't have them.
+    return clients.map((c) => ({
+      ...c,
+      goals: c.goals ?? [],
+      routines: c.routines ?? [],
+      faceitSyncedAt: c.faceitSyncedAt ?? null,
+      steamAuthCode: c.steamAuthCode ?? null,
+      lastKnownShareCode: c.lastKnownShareCode ?? null,
+    }));
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -92,6 +99,9 @@ export async function createClient(input: {
       premierRating: null,
       faceitLevel: null,
       faceitElo: null,
+      faceitSyncedAt: null,
+      steamAuthCode: null,
+      lastKnownShareCode: null,
       kovaaksUsername: null,
       assignedBenchmarkId: null,
       benchmarkHistory: {},

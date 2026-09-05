@@ -79,6 +79,11 @@ export interface Client {
   premierRating: number | null;
   faceitLevel: number | null;
   faceitElo: number | null;
+  faceitSyncedAt: string | null; // last time faceitLevel/faceitElo were refreshed - drives the auto-poll staleness check
+  /** Per-account CS2 match-history auth code, from CS2 Settings > Game. Only the account owner can generate this - no self-service way to collect it yet (that's the Steam OpenID piece still to build), so today it can only be set by pasting it in manually per client. */
+  steamAuthCode: string | null;
+  /** Most recent Premier share code already turned into a demo job - lets the scheduler auto-walk forward via GetNextMatchSharingCode instead of someone pasting each new match by hand. */
+  lastKnownShareCode: string | null;
   kovaaksUsername: string | null; // resolved lazily via lib/kovaaks-identity.ts, cached once found
   assignedBenchmarkId: string | null; // registry id of the benchmark they're currently working on
   benchmarkHistory: Record<string, UnifiedBenchmarkProgress[]>; // keyed by registry id, oldest -> newest; latest = [].at(-1)

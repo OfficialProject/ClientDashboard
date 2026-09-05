@@ -263,7 +263,7 @@ export default function ClientDetail({ client }: { client: Client }) {
 
       <div className="panel">
         <h2>Premier Demo Resolver</h2>
-        <PremierDemoPanel clientId={client.id} />
+        <PremierDemoPanel client={client} />
       </div>
 
       <div className="panel">
