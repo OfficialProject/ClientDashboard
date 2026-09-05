@@ -5,8 +5,8 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 
 import { SteamGCBot } from "../lib/steam-gc-bot";
-import { nextPendingJob, resolveJob, failJob, saveParsedStats } from "../lib/premier-jobs-store";
-import { downloadAndDecompressDemo, parseMatchStatsNative } from "../lib/demo-parser-native";
+import { nextPendingJob, resolveJob, failJob, markParsing, saveParsedStats, failParse } from "../lib/premier-jobs-store";
+import { downloadAndDecompressDemo, parseMatchStatsNative, extractMapName } from "../lib/demo-parser-native";
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -19,23 +19,27 @@ const POLL_INTERVAL_MS = 5000;
 /**
  * Parses a just-resolved job immediately, in the same worker process that
  * resolved it - this is what makes "user sees their matches on load" true
- * instead of requiring them to click "Parse demo" in the browser. Runs on
- * the current, non-stale native parser (no WASM/CI-build dependency for
- * this path). Failure here doesn't fail the job overall - the demo URL is
- * still saved and resolved, the browser's manual "Parse demo" button
- * stays as a fallback if auto-parsing hits an error.
+ * instead of requiring them to click "Parse demo" in the browser. Also
+ * re-derives the map name from the demo's own header (see extractMapName's
+ * doc comment for why that's more reliable than the GC-side guess).
+ *
+ * Explicit parseStatus transitions (parsing -> parsed | error) mean a
+ * failure here is visible in the UI as a real error, not an indefinitely
+ * spinning "Parse demo" button with no feedback.
  */
 async function autoParseJob(jobId: string, demoUrl: string) {
+  await markParsing(jobId);
   try {
     console.log(`[gc-bot] auto-parsing job ${jobId}...`);
     const demoBytes = await downloadAndDecompressDemo(demoUrl);
     const stats = parseMatchStatsNative(demoBytes);
-    await saveParsedStats(jobId, stats);
-    console.log(`[gc-bot] auto-parsed job ${jobId}: ${stats.rounds} rounds, ${stats.players.length} players`);
+    const map = extractMapName(demoBytes);
+    await saveParsedStats(jobId, stats, map);
+    console.log(`[gc-bot] auto-parsed job ${jobId}: ${map ?? "unknown map"}, ${stats.rounds} rounds, ${stats.players.length} players`);
   } catch (err) {
-    // Not fatal - the resolved demo URL is already saved, and the browser's
-    // manual "Parse demo" button still works as a fallback for this job.
-    console.error(`[gc-bot] auto-parse failed for job ${jobId} (manual re-parse still available):`, err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[gc-bot] auto-parse failed for job ${jobId} (manual re-parse still available):`, message);
+    await failParse(jobId, message);
   }
 }
 

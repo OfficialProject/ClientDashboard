@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -n web,gc-bot,scheduler -c blue,green,yellow \"next dev\" \"npm:gc-bot\" \"npm:sync-scheduler\"",
+    "dev:web": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -40,6 +41,7 @@
     "@types/steam-user": "^5.1.1",
     "@types/steamcommunity": "^3.50.0",
     "@types/steamid": "^2.0.4",
+    "concurrently": "^10.0.5",
     "pm2": "^7.0.4",
     "tsx": "^4.23.13",
     "typescript": "^5.5.0"

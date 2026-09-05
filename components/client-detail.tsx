@@ -94,16 +94,18 @@ export default function ClientDetail({ client }: { client: Client }) {
   }, [assignedBenchmarkId, client.id]);
 
   // Live auto-refresh while this page is open - only while open, not a true
-  // background job (that needs always-on hosting + a real database, not
-  // done yet). Polls every 5 minutes, only when a benchmark is assigned.
+  // background job (the standalone scheduler, npm run sync-scheduler, covers
+  // that when the page isn't open). Polls every 5 minutes: KovaaK's
+  // benchmark progress and FACEIT rank both refresh here, so simply having
+  // a client's page open keeps both current without anyone clicking sync.
   useEffect(() => {
-    if (!assignedBenchmarkId) return;
     const interval = setInterval(() => {
-      syncBenchmark(assignedBenchmarkId);
+      if (assignedBenchmarkId) syncBenchmark(assignedBenchmarkId);
+      if (client.steamId) syncFaceit();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignedBenchmarkId]);
+  }, [assignedBenchmarkId, client.steamId]);
 
   async function saveRanks() {
     setSavingRanks(true);

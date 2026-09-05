@@ -24,8 +24,10 @@ export interface PremierDemoJob {
   error: string | null;
   createdAt: string;
   resolvedAt: string | null;
-  /** Populated client-side after WASM parsing, via POST /api/premier/demo-jobs/parsed - server never parses the demo itself. */
   parsedStats: unknown | null;
+  /** Explicit state for the SEPARATE parsing step (resolution and parsing are two different things that can each fail independently) - without this, a stuck or silently-failed auto-parse in the worker looked identical to "still working" from the UI, with a spinner that never resolved and no error surfaced. */
+  parseStatus: "unparsed" | "parsing" | "parsed" | "error";
+  parseError: string | null;
 }
 
 const DATA_FILE = path.join(process.cwd(), "data", "premier-demo-jobs.json");
@@ -41,7 +43,13 @@ async function readAllUnlocked(): Promise<PremierDemoJob[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
     const jobs = JSON.parse(raw) as PremierDemoJob[];
-    return jobs.map((j) => ({ ...j, parsedStats: j.parsedStats ?? null })); // back-compat with jobs saved before parsedStats existed
+    // Back-compat with jobs saved before parseStatus existed.
+    return jobs.map((j) => ({
+      ...j,
+      parsedStats: j.parsedStats ?? null,
+      parseStatus: j.parseStatus ?? (j.parsedStats ? "parsed" : "unparsed"),
+      parseError: j.parseError ?? null,
+    }));
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -76,6 +84,8 @@ export async function enqueueJob(clientId: string, shareCode: string): Promise<P
       createdAt: new Date().toISOString(),
       resolvedAt: null,
       parsedStats: null,
+      parseStatus: "unparsed",
+      parseError: null,
     };
     jobs.push(job);
     await writeAllUnlocked(jobs);
@@ -111,13 +121,39 @@ export async function failJob(id: string, error: string): Promise<void> {
   });
 }
 
-export async function saveParsedStats(id: string, parsedStats: unknown): Promise<PremierDemoJob | null> {
+export async function markParsing(id: string): Promise<void> {
+  return withLock(async () => {
+    const jobs = await readAllUnlocked();
+    const idx = jobs.findIndex((j) => j.id === id);
+    if (idx === -1) return;
+    jobs[idx] = { ...jobs[idx], parseStatus: "parsing", parseError: null };
+    await writeAllUnlocked(jobs);
+  });
+}
+
+export async function saveParsedStats(id: string, parsedStats: unknown, map?: string | null): Promise<PremierDemoJob | null> {
   return withLock(async () => {
     const jobs = await readAllUnlocked();
     const idx = jobs.findIndex((j) => j.id === id);
     if (idx === -1) return null;
-    jobs[idx] = { ...jobs[idx], parsedStats };
+    jobs[idx] = {
+      ...jobs[idx],
+      parsedStats,
+      parseStatus: "parsed",
+      parseError: null,
+      map: map !== undefined && map !== null ? map : jobs[idx].map,
+    };
     await writeAllUnlocked(jobs);
     return jobs[idx];
+  });
+}
+
+export async function failParse(id: string, error: string): Promise<void> {
+  return withLock(async () => {
+    const jobs = await readAllUnlocked();
+    const idx = jobs.findIndex((j) => j.id === id);
+    if (idx === -1) return;
+    jobs[idx] = { ...jobs[idx], parseStatus: "error", parseError: error };
+    await writeAllUnlocked(jobs);
   });
 }

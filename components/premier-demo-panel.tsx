@@ -13,6 +13,8 @@ interface Job {
   error: string | null;
   createdAt: string;
   parsedStats: ParsedMatchStats | null;
+  parseStatus: "unparsed" | "parsing" | "parsed" | "error";
+  parseError: string | null;
 }
 
 export default function PremierDemoPanel({ client }: { client: Client }) {
@@ -175,6 +177,9 @@ export default function PremierDemoPanel({ client }: { client: Client }) {
 
             {j.status === "resolved" && (
               <div style={{ paddingLeft: 4, marginTop: 4 }}>
+                {j.parseStatus === "parsing" && parsingJobId !== j.id && (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Auto-parsing in the background worker...</div>
+                )}
                 {j.parsedStats ? (
                   <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
                     {j.parsedStats.rounds} rounds parsed · {j.parsedStats.players.length} players ·{" "}
@@ -187,10 +192,15 @@ export default function PremierDemoPanel({ client }: { client: Client }) {
                       Re-parse
                     </button>
                   </div>
-                ) : (
+                ) : j.parseStatus !== "parsing" ? (
                   <button className="sort-toggle" style={{ fontSize: 11 }} onClick={() => parseDemo(j)} disabled={parsingJobId === j.id}>
                     {parsingJobId === j.id ? "Parsing (in-browser)..." : "Parse demo"}
                   </button>
+                ) : null}
+                {j.parseStatus === "error" && j.parseError && !parseError[j.id] && (
+                  <div style={{ color: "var(--danger, #f87171)", fontSize: 11, marginTop: 4 }}>
+                    Background auto-parse failed: {j.parseError}
+                  </div>
                 )}
                 {parseError[j.id] && (
                   <div style={{ color: "var(--danger, #f87171)", fontSize: 11, marginTop: 4 }}>{parseError[j.id]}</div>
