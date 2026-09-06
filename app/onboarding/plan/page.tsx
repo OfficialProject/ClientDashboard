@@ -1,4 +1,29 @@
-export default function PlanPage() {
+import { getServerSupabase } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+
+export default async function PlanPage() {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status, plan, role")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    // Founder/early-tester comp already granted at Connect Steam - skip
+    // Stripe entirely instead of showing a "Subscribe" button to someone
+    // who already has lifetime access.
+    if (sub?.status === "lifetime" || sub?.status === "active") {
+      redirect("/");
+    }
+  }
+
   return (
     <main className="shell" style={{ maxWidth: 480, margin: "60px auto" }}>
       <div style={{ marginBottom: 24 }}>

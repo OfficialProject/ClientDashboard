@@ -251,6 +251,7 @@ export type Database = {
           stripe_subscription_id: string | null;
           status: string;
           plan: string;
+          role: string;
           updated_at: string;
         };
         Insert: {
@@ -259,6 +260,7 @@ export type Database = {
           stripe_subscription_id?: string | null;
           status?: string;
           plan?: string;
+          role?: string;
           updated_at?: string;
         };
         Update: {
@@ -267,6 +269,7 @@ export type Database = {
           stripe_subscription_id?: string | null;
           status?: string;
           plan?: string;
+          role?: string;
           updated_at?: string;
         };
         Relationships: [];

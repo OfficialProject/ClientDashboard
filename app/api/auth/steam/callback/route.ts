@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { verifySteamCallback } from "@/lib/steam-openid";
 import { getSteamProfile } from "@/lib/steam";
+import { checkFounderAllowlist } from "@/lib/founder-allowlist";
 
 export async function GET(request: NextRequest) {
   const supabase = await getServerSupabase();
@@ -50,6 +51,21 @@ export async function GET(request: NextRequest) {
       .select("id")
       .single();
     clientId = created!.id;
+  }
+
+  // Founder/early-tester comp - grants lifetime access (and admin role,
+  // for the owner) without ever touching Stripe. Checked against the
+  // just-verified SteamID64, not something a client could fake by editing
+  // a form field.
+  const grant = await checkFounderAllowlist(steamId64).catch(() => null);
+  if (grant) {
+    await supabase.from("subscriptions").upsert({
+      owner_id: user.id,
+      status: "lifetime",
+      plan: "lifetime",
+      role: grant.role,
+      updated_at: new Date().toISOString(),
+    });
   }
 
   // Onboarding, not a settings panel you have to go find later - straight
