@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { listClients } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
@@ -6,12 +7,12 @@ export async function GET(request: NextRequest) {
   const excludeClientId = request.nextUrl.searchParams.get("excludeClientId");
   if (!benchmarkId) return NextResponse.json({ error: "benchmarkId is required" }, { status: 400 });
 
-  const clients = await listClients();
+  const supabase = await getServerSupabase();
+  const clients = await listClients(supabase);
   const relevant = clients.filter(
     (c) => c.id !== excludeClientId && c.benchmarkHistory[benchmarkId]?.length
   );
 
-  // category -> running sum/count, to average across every client's latest snapshot
   const totals: Record<string, { sum: number; count: number }> = {};
   for (const c of relevant) {
     const latest = c.benchmarkHistory[benchmarkId].at(-1)!;

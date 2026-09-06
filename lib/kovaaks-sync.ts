@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./supabase/database.types";
 import { listClients, appendBenchmarkSnapshot } from "./store";
 import { getBenchmark } from "./benchmarks";
 import { syncBenchmarkProgress } from "./unified-progress";
@@ -11,8 +13,11 @@ export interface KovaaksSyncAllResult {
   error?: string;
 }
 
-export async function syncAllKovaaksProgress(minAgeMs = DEFAULT_MIN_AGE_MS): Promise<KovaaksSyncAllResult[]> {
-  const clients = await listClients();
+export async function syncAllKovaaksProgress(
+  supabase: SupabaseClient<Database>,
+  minAgeMs = DEFAULT_MIN_AGE_MS
+): Promise<KovaaksSyncAllResult[]> {
+  const clients = await listClients(supabase);
   const now = Date.now();
 
   const results = await Promise.allSettled(
@@ -28,7 +33,7 @@ export async function syncAllKovaaksProgress(minAgeMs = DEFAULT_MIN_AGE_MS): Pro
         const def = await getBenchmark(benchmarkId);
         if (!def) return { clientId: c.id, error: "Unknown benchmark" };
         const progress = await syncBenchmarkProgress(def, c.steamId);
-        await appendBenchmarkSnapshot(c.id, benchmarkId, progress);
+        await appendBenchmarkSnapshot(supabase, c.id, benchmarkId, progress);
         return { clientId: c.id, synced: true };
       })
   );

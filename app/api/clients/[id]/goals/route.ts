@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { addGoal, deleteGoal } from "@/lib/store";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -7,7 +8,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!benchmarkId || !category || !subcategory || typeof targetScore !== "number") {
     return NextResponse.json({ error: "benchmarkId, category, subcategory, and targetScore are required" }, { status: 400 });
   }
-  const client = await addGoal(params.id, { benchmarkId, category, subcategory, targetScore });
+  const supabase = await getServerSupabase();
+  const client = await addGoal(supabase, params.id, { benchmarkId, category, subcategory, targetScore });
   if (!client) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ client });
 }
@@ -15,7 +17,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const body = await request.json();
   if (!body?.goalId) return NextResponse.json({ error: "goalId is required" }, { status: 400 });
-  const client = await deleteGoal(params.id, body.goalId);
+  const supabase = await getServerSupabase();
+  const client = await deleteGoal(supabase, params.id, body.goalId);
   if (!client) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ client });
 }

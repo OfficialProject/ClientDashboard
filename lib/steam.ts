@@ -37,3 +37,30 @@ export async function resolveToSteamId64(rawInput: string): Promise<string> {
   }
   return result.steamid;
 }
+
+export interface SteamProfile {
+  steamId64: string;
+  personaName: string;
+  avatar: string;
+}
+
+/** Real profile data (name + avatar) for a verified SteamID64 - used right after Steam OpenID login to populate a client record instead of leaving it blank. */
+export async function getSteamProfile(steamId64: string): Promise<SteamProfile | null> {
+  const key = process.env.STEAM_WEB_API_KEY;
+  if (!key) throw new Error("STEAM_WEB_API_KEY is not configured.");
+
+  const url = new URL("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/");
+  url.searchParams.set("key", key);
+  url.searchParams.set("steamids", steamId64);
+
+  const res = await fetch(url, { next: { revalidate: 0 } });
+  if (!res.ok) throw new Error("Steam profile lookup failed.");
+  const player = (await res.json())?.response?.players?.[0];
+  if (!player) return null;
+
+  return {
+    steamId64,
+    personaName: player.personaname ?? "",
+    avatar: player.avatarfull ?? player.avatar ?? "",
+  };
+}

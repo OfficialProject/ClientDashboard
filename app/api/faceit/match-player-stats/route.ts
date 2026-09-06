@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { getClient } from "@/lib/store";
 import { getFaceitPlayerBySteamId, getMatchPlayerStats } from "@/lib/faceit";
 
@@ -7,7 +8,8 @@ export async function GET(request: NextRequest) {
   const matchId = request.nextUrl.searchParams.get("matchId");
   if (!clientId || !matchId) return NextResponse.json({ error: "clientId and matchId are required" }, { status: 400 });
 
-  const client = await getClient(clientId);
+  const supabase = await getServerSupabase();
+  const client = await getClient(supabase, clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   try {

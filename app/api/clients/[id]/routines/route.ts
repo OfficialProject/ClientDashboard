@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { addRoutine, deleteRoutine } from "@/lib/store";
 import type { Routine } from "@/lib/types";
 
@@ -9,7 +10,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "name, benchmarkId, and a non-empty scenarios array are required" }, { status: 400 });
   }
   const validSource: Routine["source"] = source === "auto-progression" ? "auto-progression" : "manual";
-  const client = await addRoutine(params.id, { name, benchmarkId, scenarios, source: validSource });
+  const supabase = await getServerSupabase();
+  const client = await addRoutine(supabase, params.id, { name, benchmarkId, scenarios, source: validSource });
   if (!client) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ client });
 }
@@ -17,7 +19,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const body = await request.json();
   if (!body?.routineId) return NextResponse.json({ error: "routineId is required" }, { status: 400 });
-  const client = await deleteRoutine(params.id, body.routineId);
+  const supabase = await getServerSupabase();
+  const client = await deleteRoutine(supabase, params.id, body.routineId);
   if (!client) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ client });
 }

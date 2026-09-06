@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { getClient, appendBenchmarkSnapshot } from "@/lib/store";
 import { getBenchmark } from "@/lib/benchmarks";
 import { syncBenchmarkProgress } from "@/lib/unified-progress";
@@ -9,13 +10,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "clientId and benchmarkId are required" }, { status: 400 });
   }
 
-  const [client, def] = await Promise.all([getClient(clientId), getBenchmark(benchmarkId)]);
+  const supabase = await getServerSupabase();
+  const [client, def] = await Promise.all([getClient(supabase, clientId), getBenchmark(benchmarkId)]);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
   if (!def) return NextResponse.json({ error: "Unknown benchmark" }, { status: 404 });
 
   try {
     const progress = await syncBenchmarkProgress(def, client.steamId);
-    const updated = await appendBenchmarkSnapshot(clientId, benchmarkId, progress);
+    const updated = await appendBenchmarkSnapshot(supabase, clientId, benchmarkId, progress);
     return NextResponse.json({ client: updated });
   } catch (err) {
     return NextResponse.json(

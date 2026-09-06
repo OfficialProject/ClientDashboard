@@ -1,208 +1,229 @@
-import { promises as fs } from "fs";
-import path from "path";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./supabase/database.types";
 import type { Client, Note, Goal, Routine, UnifiedBenchmarkProgress } from "./types";
 
 /**
- * v1 storage: a JSON file on disk. This works fine for local dev and for
- * a single always-on server, but will NOT persist correctly on serverless
- * hosts (Vercel etc. give you a fresh filesystem per invocation). Swap
- * this module for a real Postgres/Supabase-backed implementation before
- * deploying anywhere serverless - the rest of the app only depends on the
- * function signatures below, not on how they're implemented.
- *
- * CONFIRMED LIVE BUG, FIXED HERE: every read-modify-write here used to run
- * with no locking at all. Once the roster's bulk sync-all (v1.5) started
- * firing many concurrent syncs, plus the 5-minute auto-poll, plus
- * auto-sync-on-assign, it became realistic for two requests to read and
- * write clients.json at the same time - and concurrent fs.writeFile calls
- * to the same path can interleave, corrupting the file (confirmed: a real
- * "Unexpected non-whitespace character" JSON parse error in production
- * use, not a hypothetical). Fixed two ways: (1) every operation that
- * touches the file now runs through a single serialized queue, so no two
- * can overlap; (2) writes go to a temp file and get renamed into place
- * (atomic on POSIX filesystems), so even a crash mid-write can't leave a
- * half-written file behind.
+ * v2 storage: Supabase/Postgres, replacing the v1 JSON-file store. Every
+ * function here takes a Supabase client as its first argument instead of
+ * reading a global file - callers pass either a per-request, cookie-scoped
+ * client (getServerSupabase(), RLS-enforced, used by API routes acting on
+ * behalf of a logged-in user) or a service-role client (getServiceSupabase(),
+ * bypasses RLS, used by background workers that operate across all clients).
+ * The RLS policies from the schema migration are the actual multi-tenancy
+ * boundary now - not application-level filtering - so a per-request client
+ * only ever sees rows it owns without this file needing to filter manually.
  */
 
-const DATA_FILE = path.join(process.cwd(), "data", "clients.json");
+type SB = SupabaseClient<Database>;
+type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
+type SnapshotRow = Database["public"]["Tables"]["benchmark_snapshots"]["Row"];
+type NoteRow = Database["public"]["Tables"]["notes"]["Row"];
+type GoalRow = Database["public"]["Tables"]["goals"]["Row"];
+type RoutineRow = Database["public"]["Tables"]["routines"]["Row"];
 
-// Serializes all file access through one queue - this is the actual fix.
-let queue: Promise<unknown> = Promise.resolve();
-function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  const result = queue.then(fn, fn); // run after prior op regardless of its outcome
-  queue = result.catch(() => {}); // don't let one failure poison the whole queue
-  return result;
+function noteFromRow(r: NoteRow): Note {
+  return { id: r.id, date: r.created_at, text: r.text };
 }
 
-async function readAllUnlocked(): Promise<Client[]> {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
-    const clients = JSON.parse(raw) as Client[];
-    // Back-compat: clients saved before these fields existed won't have them.
-    return clients.map((c) => ({
-      ...c,
-      goals: c.goals ?? [],
-      routines: c.routines ?? [],
-      faceitSyncedAt: c.faceitSyncedAt ?? null,
-      steamAuthCode: c.steamAuthCode ?? null,
-      lastKnownShareCode: c.lastKnownShareCode ?? null,
-    }));
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
+function goalFromRow(r: GoalRow): Goal {
+  return {
+    id: r.id,
+    benchmarkId: r.benchmark_id,
+    category: r.category,
+    subcategory: r.subcategory,
+    targetScore: Number(r.target_score),
+    createdAt: r.created_at,
+  };
+}
+
+function routineFromRow(r: RoutineRow): Routine {
+  return {
+    id: r.id,
+    name: r.name,
+    benchmarkId: r.benchmark_id,
+    scenarios: r.scenarios as string[],
+    source: r.source as Routine["source"],
+    createdAt: r.created_at,
+  };
+}
+
+/** Assembles the full Client shape (matching the old JSON-store contract) from its normalized rows - keeps every downstream component's expectations unchanged even though the storage underneath is fully relational now. */
+async function hydrateClient(supabase: SB, row: ClientRow): Promise<Client> {
+  const [{ data: snapshots }, { data: notes }, { data: goals }, { data: routines }] = await Promise.all([
+    supabase.from("benchmark_snapshots").select("*").eq("client_id", row.id).order("synced_at", { ascending: true }),
+    supabase.from("notes").select("*").eq("client_id", row.id).order("created_at", { ascending: false }),
+    supabase.from("goals").select("*").eq("client_id", row.id),
+    supabase.from("routines").select("*").eq("client_id", row.id).order("created_at", { ascending: false }),
+  ]);
+
+  const benchmarkHistory: Record<string, UnifiedBenchmarkProgress[]> = {};
+  for (const s of (snapshots ?? []) as SnapshotRow[]) {
+    (benchmarkHistory[s.benchmark_id] ??= []).push({
+      benchmarkId: s.benchmark_id,
+      benchmarkName: s.benchmark_id, // resolved from the registry at display time, same as v1
+      difficultyName: "",
+      overallRankName: s.overall_rank_name ?? "",
+      groups: s.groups as UnifiedBenchmarkProgress["groups"],
+      scenarioScores: s.scenario_scores as Record<string, number>,
+      scenarioLeaderboardRanks: s.scenario_leaderboard_ranks as Record<string, number>,
+      syncedAt: s.synced_at,
+    });
   }
+
+  return {
+    id: row.id,
+    nickname: row.nickname,
+    steamId: row.steam_id,
+    steamName: row.steam_name ?? "",
+    avatar: row.avatar ?? "",
+    premierRating: row.premier_rating,
+    faceitLevel: row.faceit_level,
+    faceitElo: row.faceit_elo,
+    faceitSyncedAt: row.faceit_synced_at,
+    steamAuthCode: row.steam_auth_code,
+    lastKnownShareCode: row.last_known_share_code,
+    kovaaksUsername: row.kovaaks_username,
+    assignedBenchmarkId: row.assigned_benchmark_id,
+    benchmarkHistory,
+    notes: (notes ?? []).map(noteFromRow),
+    goals: (goals ?? []).map(goalFromRow),
+    routines: (routines ?? []).map(routineFromRow),
+    createdAt: row.created_at,
+  };
 }
 
-async function writeAllUnlocked(clients: Client[]): Promise<void> {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  const tmpFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmpFile, JSON.stringify(clients, null, 2), "utf-8");
-  await fs.rename(tmpFile, DATA_FILE); // atomic on POSIX - no half-written file possible
+export async function listClients(supabase: SB): Promise<Client[]> {
+  const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: true });
+  if (error) throw error;
+  return Promise.all((data ?? []).map((row) => hydrateClient(supabase, row)));
 }
 
-async function readAll(): Promise<Client[]> {
-  return withLock(readAllUnlocked);
+export async function getClient(supabase: SB, id: string): Promise<Client | null> {
+  const { data, error } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return hydrateClient(supabase, data);
 }
 
-/** Read-modify-write as one atomic unit - use this instead of separate readAll+writeAll for any mutation. */
-async function withClients<T>(fn: (clients: Client[]) => T | Promise<T>): Promise<T> {
-  return withLock(async () => {
-    const clients = await readAllUnlocked();
-    const result = await fn(clients);
-    await writeAllUnlocked(clients);
-    return result;
-  });
-}
+export async function createClient(
+  supabase: SB,
+  input: { nickname: string; steamId: string; steamName: string; avatar: string }
+): Promise<Client> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
 
-export async function listClients(): Promise<Client[]> {
-  return readAll();
-}
-
-export async function getClient(id: string): Promise<Client | null> {
-  const clients = await readAll();
-  return clients.find((c) => c.id === id) ?? null;
-}
-
-export async function createClient(input: {
-  nickname: string;
-  steamId: string;
-  steamName: string;
-  avatar: string;
-}): Promise<Client> {
-  return withClients((clients) => {
-    const client: Client = {
-      id: crypto.randomUUID(),
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({
+      owner_id: user.id,
       nickname: input.nickname || input.steamName,
-      steamId: input.steamId,
-      steamName: input.steamName,
+      steam_id: input.steamId,
+      steam_name: input.steamName,
       avatar: input.avatar,
-      premierRating: null,
-      faceitLevel: null,
-      faceitElo: null,
-      faceitSyncedAt: null,
-      steamAuthCode: null,
-      lastKnownShareCode: null,
-      kovaaksUsername: null,
-      assignedBenchmarkId: null,
-      benchmarkHistory: {},
-      notes: [],
-      goals: [],
-      routines: [],
-      createdAt: new Date().toISOString(),
-    };
-    clients.push(client);
-    return client;
-  });
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return hydrateClient(supabase, data);
 }
 
-/** Appends a dated snapshot rather than overwriting - this is what makes trends possible. */
+/** Inserts a dated snapshot row rather than overwriting - this is what makes trends possible. */
 export async function appendBenchmarkSnapshot(
+  supabase: SB,
   id: string,
   benchmarkId: string,
   progress: UnifiedBenchmarkProgress
 ): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    const existing = clients[idx].benchmarkHistory[benchmarkId] ?? [];
-    clients[idx].benchmarkHistory = {
-      ...clients[idx].benchmarkHistory,
-      [benchmarkId]: [...existing, progress],
-    };
-    return clients[idx];
+  const { error } = await supabase.from("benchmark_snapshots").insert({
+    client_id: id,
+    benchmark_id: benchmarkId,
+    overall_rank_name: progress.overallRankName,
+    groups: progress.groups,
+    scenario_scores: progress.scenarioScores,
+    scenario_leaderboard_ranks: progress.scenarioLeaderboardRanks,
+    synced_at: progress.syncedAt,
   });
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
-export async function updateClient(
-  id: string,
-  patch: Partial<Client>
-): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    clients[idx] = { ...clients[idx], ...patch };
-    return clients[idx];
-  });
+const CLIENT_PATCH_COLUMNS: Record<string, string> = {
+  nickname: "nickname",
+  premierRating: "premier_rating",
+  faceitLevel: "faceit_level",
+  faceitElo: "faceit_elo",
+  faceitSyncedAt: "faceit_synced_at",
+  assignedBenchmarkId: "assigned_benchmark_id",
+  steamAuthCode: "steam_auth_code",
+  lastKnownShareCode: "last_known_share_code",
+};
+
+export async function updateClient(supabase: SB, id: string, patch: Partial<Client>): Promise<Client | null> {
+  const row: Database["public"]["Tables"]["clients"]["Update"] = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const column = CLIENT_PATCH_COLUMNS[key];
+    if (column) (row as Record<string, unknown>)[column] = value;
+  }
+  if (Object.keys(row).length === 0) return getClient(supabase, id);
+
+  const { error } = await supabase.from("clients").update(row).eq("id", id);
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
-export async function addNote(id: string, text: string): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    const note: Note = { id: crypto.randomUUID(), date: new Date().toISOString(), text };
-    clients[idx].notes = [note, ...clients[idx].notes];
-    return clients[idx];
-  });
+export async function addNote(supabase: SB, id: string, text: string): Promise<Client | null> {
+  const { error } = await supabase.from("notes").insert({ client_id: id, text });
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
 export async function addGoal(
+  supabase: SB,
   id: string,
   input: { benchmarkId: string; category: string; subcategory: string; targetScore: number }
 ): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    const goal: Goal = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...input };
-    clients[idx].goals = [...clients[idx].goals, goal];
-    return clients[idx];
+  const { error } = await supabase.from("goals").insert({
+    client_id: id,
+    benchmark_id: input.benchmarkId,
+    category: input.category,
+    subcategory: input.subcategory,
+    target_score: input.targetScore,
   });
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
-export async function deleteGoal(id: string, goalId: string): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    clients[idx].goals = clients[idx].goals.filter((g) => g.id !== goalId);
-    return clients[idx];
-  });
+export async function deleteGoal(supabase: SB, id: string, goalId: string): Promise<Client | null> {
+  const { error } = await supabase.from("goals").delete().eq("id", goalId).eq("client_id", id);
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
 export async function addRoutine(
+  supabase: SB,
   id: string,
   input: { name: string; benchmarkId: string; scenarios: string[]; source: Routine["source"] }
 ): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    const routine: Routine = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...input };
-    clients[idx].routines = [routine, ...clients[idx].routines];
-    return clients[idx];
+  const { error } = await supabase.from("routines").insert({
+    client_id: id,
+    name: input.name,
+    benchmark_id: input.benchmarkId,
+    scenarios: input.scenarios,
+    source: input.source,
   });
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
-export async function deleteRoutine(id: string, routineId: string): Promise<Client | null> {
-  return withClients((clients) => {
-    const idx = clients.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    clients[idx].routines = clients[idx].routines.filter((r) => r.id !== routineId);
-    return clients[idx];
-  });
+export async function deleteRoutine(supabase: SB, id: string, routineId: string): Promise<Client | null> {
+  const { error } = await supabase.from("routines").delete().eq("id", routineId).eq("client_id", id);
+  if (error) throw error;
+  return getClient(supabase, id);
 }
 
-export async function deleteClient(id: string): Promise<void> {
-  return withClients((clients) => {
-    const remaining = clients.filter((c) => c.id !== id);
-    clients.length = 0;
-    clients.push(...remaining);
-  });
+export async function deleteClient(supabase: SB, id: string): Promise<void> {
+  const { error } = await supabase.from("clients").delete().eq("id", id);
+  if (error) throw error;
 }

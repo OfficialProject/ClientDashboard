@@ -1,18 +1,16 @@
-import { promises as fs } from "fs";
-import path from "path";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./supabase/database.types";
 
 /**
- * Same atomic-write JSON-file pattern as lib/store.ts, with one added
- * risk: this file is written from TWO separate Node processes (the
- * Next.js server enqueues jobs, the standalone gc-bot worker resolves
- * them), so the in-process write-queue lock that protects clients.json
- * doesn't fully protect this file - two truly simultaneous writes from
- * different processes could still race, with the atomic rename meaning
- * the loser's update is silently dropped rather than corrupting the
- * file. Low-probability given this runs one worker against one job at a
- * time, but real. Same "swap for a real DB before this matters" note as
- * clients.json - more urgent here since two processes touch it.
+ * v2 storage: Supabase, replacing the v1 JSON-file job queue. The
+ * cross-process race risk documented in v1 (two Node processes writing the
+ * same file) is gone entirely - Postgres handles concurrent writes
+ * correctly, which was the whole reason that risk existed in the first
+ * place.
  */
+
+type SB = SupabaseClient<Database>;
+type JobRow = Database["public"]["Tables"]["premier_demo_jobs"]["Row"];
 
 export interface PremierDemoJob {
   id: string;
@@ -25,135 +23,103 @@ export interface PremierDemoJob {
   createdAt: string;
   resolvedAt: string | null;
   parsedStats: unknown | null;
-  /** Explicit state for the SEPARATE parsing step (resolution and parsing are two different things that can each fail independently) - without this, a stuck or silently-failed auto-parse in the worker looked identical to "still working" from the UI, with a spinner that never resolved and no error surfaced. */
   parseStatus: "unparsed" | "parsing" | "parsed" | "error";
   parseError: string | null;
 }
 
-const DATA_FILE = path.join(process.cwd(), "data", "premier-demo-jobs.json");
-
-let queue: Promise<unknown> = Promise.resolve();
-function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  const result = queue.then(fn, fn);
-  queue = result.catch(() => {});
-  return result;
+function fromRow(r: JobRow): PremierDemoJob {
+  return {
+    id: r.id,
+    clientId: r.client_id,
+    shareCode: r.share_code,
+    status: r.status as PremierDemoJob["status"],
+    demoUrl: r.demo_url,
+    map: r.map,
+    error: r.error,
+    createdAt: r.created_at,
+    resolvedAt: r.resolved_at,
+    parsedStats: r.parsed_stats,
+    parseStatus: r.parse_status as PremierDemoJob["parseStatus"],
+    parseError: r.parse_error,
+  };
 }
 
-async function readAllUnlocked(): Promise<PremierDemoJob[]> {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
-    const jobs = JSON.parse(raw) as PremierDemoJob[];
-    // Back-compat with jobs saved before parseStatus existed.
-    return jobs.map((j) => ({
-      ...j,
-      parsedStats: j.parsedStats ?? null,
-      parseStatus: j.parseStatus ?? (j.parsedStats ? "parsed" : "unparsed"),
-      parseError: j.parseError ?? null,
-    }));
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
+export async function listJobs(supabase: SB, clientId?: string): Promise<PremierDemoJob[]> {
+  let query = supabase.from("premier_demo_jobs").select("*").order("created_at", { ascending: true });
+  if (clientId) query = query.eq("client_id", clientId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(fromRow);
 }
 
-async function writeAllUnlocked(jobs: PremierDemoJob[]): Promise<void> {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  const tmpFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmpFile, JSON.stringify(jobs, null, 2), "utf-8");
-  await fs.rename(tmpFile, DATA_FILE);
+export async function enqueueJob(supabase: SB, clientId: string, shareCode: string): Promise<PremierDemoJob> {
+  const { data, error } = await supabase
+    .from("premier_demo_jobs")
+    .insert({ client_id: clientId, share_code: shareCode })
+    .select()
+    .single();
+  if (error) throw error;
+  return fromRow(data);
 }
 
-export async function listJobs(clientId?: string): Promise<PremierDemoJob[]> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    return clientId ? jobs.filter((j) => j.clientId === clientId) : jobs;
-  });
+/** Used by the worker process: grabs the oldest pending job, if any. Single-worker assumption unchanged from v1 - see gc-bot-worker.ts. */
+export async function nextPendingJob(supabase: SB): Promise<PremierDemoJob | null> {
+  const { data, error } = await supabase
+    .from("premier_demo_jobs")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
 }
 
-export async function enqueueJob(clientId: string, shareCode: string): Promise<PremierDemoJob> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const job: PremierDemoJob = {
-      id: crypto.randomUUID(),
-      clientId,
-      shareCode,
-      status: "pending",
-      demoUrl: null,
-      map: null,
-      error: null,
-      createdAt: new Date().toISOString(),
-      resolvedAt: null,
-      parsedStats: null,
-      parseStatus: "unparsed",
-      parseError: null,
-    };
-    jobs.push(job);
-    await writeAllUnlocked(jobs);
-    return job;
-  });
+export async function resolveJob(supabase: SB, id: string, result: { demoUrl: string | null; map: string | null }): Promise<void> {
+  const { error } = await supabase
+    .from("premier_demo_jobs")
+    .update({ status: "resolved", demo_url: result.demoUrl, map: result.map, resolved_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
 }
 
-/** Used by the worker process: grabs the oldest pending job, if any, without removing it (marks in-progress by the caller once picked up). */
-export async function nextPendingJob(): Promise<PremierDemoJob | null> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    return jobs.find((j) => j.status === "pending") ?? null;
-  });
+export async function failJob(supabase: SB, id: string, errorMessage: string): Promise<void> {
+  const { error } = await supabase
+    .from("premier_demo_jobs")
+    .update({ status: "error", error: errorMessage, resolved_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
 }
 
-export async function resolveJob(id: string, result: { demoUrl: string | null; map: string | null }): Promise<void> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return;
-    jobs[idx] = { ...jobs[idx], status: "resolved", demoUrl: result.demoUrl, map: result.map, resolvedAt: new Date().toISOString() };
-    await writeAllUnlocked(jobs);
-  });
+export async function markParsing(supabase: SB, id: string): Promise<void> {
+  const { error } = await supabase
+    .from("premier_demo_jobs")
+    .update({ parse_status: "parsing", parse_error: null })
+    .eq("id", id);
+  if (error) throw error;
 }
 
-export async function failJob(id: string, error: string): Promise<void> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return;
-    jobs[idx] = { ...jobs[idx], status: "error", error, resolvedAt: new Date().toISOString() };
-    await writeAllUnlocked(jobs);
-  });
+export async function saveParsedStats(
+  supabase: SB,
+  id: string,
+  parsedStats: unknown,
+  map?: string | null
+): Promise<PremierDemoJob | null> {
+  const patch: Database["public"]["Tables"]["premier_demo_jobs"]["Update"] = {
+    parsed_stats: parsedStats as JobRow["parsed_stats"],
+    parse_status: "parsed",
+    parse_error: null,
+  };
+  if (map !== undefined && map !== null) patch.map = map;
+  const { data, error } = await supabase.from("premier_demo_jobs").update(patch).eq("id", id).select().maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
 }
 
-export async function markParsing(id: string): Promise<void> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return;
-    jobs[idx] = { ...jobs[idx], parseStatus: "parsing", parseError: null };
-    await writeAllUnlocked(jobs);
-  });
-}
-
-export async function saveParsedStats(id: string, parsedStats: unknown, map?: string | null): Promise<PremierDemoJob | null> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return null;
-    jobs[idx] = {
-      ...jobs[idx],
-      parsedStats,
-      parseStatus: "parsed",
-      parseError: null,
-      map: map !== undefined && map !== null ? map : jobs[idx].map,
-    };
-    await writeAllUnlocked(jobs);
-    return jobs[idx];
-  });
-}
-
-export async function failParse(id: string, error: string): Promise<void> {
-  return withLock(async () => {
-    const jobs = await readAllUnlocked();
-    const idx = jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return;
-    jobs[idx] = { ...jobs[idx], parseStatus: "error", parseError: error };
-    await writeAllUnlocked(jobs);
-  });
+export async function failParse(supabase: SB, id: string, errorMessage: string): Promise<void> {
+  const { error } = await supabase
+    .from("premier_demo_jobs")
+    .update({ parse_status: "error", parse_error: errorMessage })
+    .eq("id", id);
+  if (error) throw error;
 }

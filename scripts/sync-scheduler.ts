@@ -1,18 +1,20 @@
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" }); // standalone scripts don't get Next.js's automatic .env.local loading
 
+import { getServiceSupabase } from "../lib/supabase/service";
 import { syncAllKovaaksProgress } from "../lib/kovaaks-sync";
 import { refreshAllFaceitRanks } from "../lib/faceit-sync";
 import { autoDiscoverPremierMatches } from "../lib/premier-auto-discovery";
 
 const INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MINUTES ?? 15) * 60 * 1000;
+const supabase = getServiceSupabase(); // acts across ALL clients regardless of owner
 
 async function runOnce() {
   const startedAt = new Date().toISOString();
   console.log(`[sync-scheduler] run starting ${startedAt}`);
 
   try {
-    const kovaaks = await syncAllKovaaksProgress();
+    const kovaaks = await syncAllKovaaksProgress(supabase);
     const synced = kovaaks.filter((r) => r.synced).length;
     const failed = kovaaks.filter((r) => r.error);
     console.log(`[sync-scheduler] KovaaK's: ${synced} synced, ${kovaaks.length - synced} skipped/failed`);
@@ -22,7 +24,7 @@ async function runOnce() {
   }
 
   try {
-    const faceit = await refreshAllFaceitRanks();
+    const faceit = await refreshAllFaceitRanks(supabase);
     const synced = faceit.filter((r) => r.synced).length;
     const failed = faceit.filter((r) => r.error);
     console.log(`[sync-scheduler] FACEIT: ${synced} synced, ${faceit.length - synced} skipped/failed`);
@@ -32,7 +34,7 @@ async function runOnce() {
   }
 
   try {
-    const premier = await autoDiscoverPremierMatches();
+    const premier = await autoDiscoverPremierMatches(supabase);
     const totalNew = premier.reduce((sum, r) => sum + r.newJobsEnqueued, 0);
     console.log(`[sync-scheduler] Premier auto-discovery: ${totalNew} new demo jobs enqueued across ${premier.length} eligible clients`);
     const failed = premier.filter((r) => r.error);

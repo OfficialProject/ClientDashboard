@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { listClients } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
   const benchmarkId = request.nextUrl.searchParams.get("benchmarkId");
   if (!benchmarkId) return NextResponse.json({ error: "benchmarkId is required" }, { status: 400 });
 
-  const clients = await listClients();
+  const supabase = await getServerSupabase();
+  const clients = await listClients(supabase);
   const relevant = clients.filter((c) => c.benchmarkHistory[benchmarkId]?.length);
 
   const series = relevant.map((c) => {

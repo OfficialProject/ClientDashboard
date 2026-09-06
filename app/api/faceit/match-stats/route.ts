@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { getClient } from "@/lib/store";
 import { getFaceitPlayerBySteamId, getFaceitLifetimeStats, getFaceitRecentMatches } from "@/lib/faceit";
 
@@ -6,7 +7,8 @@ export async function GET(request: NextRequest) {
   const clientId = request.nextUrl.searchParams.get("clientId");
   if (!clientId) return NextResponse.json({ error: "clientId is required" }, { status: 400 });
 
-  const client = await getClient(clientId);
+  const supabase = await getServerSupabase();
+  const client = await getClient(supabase, clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   try {
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
     const [lifetime, recentMatches] = await Promise.all([
       getFaceitLifetimeStats(player.player_id),
-      getFaceitRecentMatches(player.player_id, 10).catch(() => []), // history endpoint failing shouldn't take down lifetime stats
+      getFaceitRecentMatches(player.player_id, 10).catch(() => []),
     ]);
     return NextResponse.json({ lifetime, recentMatches });
   } catch (err) {
